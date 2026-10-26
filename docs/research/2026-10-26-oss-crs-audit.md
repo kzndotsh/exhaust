@@ -1,0 +1,27 @@
+# Audit: ossf/oss-crs
+
+Source: [github.com/ossf/oss-crs](https://github.com/ossf/oss-crs). An actively maintained (pushed the day of this audit) OpenSSF orchestration framework for running "Cyber Reasoning Systems," the autonomous bug-finding/patching systems DARPA's AIxCC produced, built from the field's own stated lesson that the original competition entries were largely unusable outside their own teams. Python, `uv`-managed. A different domain from exhaust (fuzzing and patching open-source C/C++ via OSS-Fuzz, not live web-application pentesting), audited specifically for its orchestration, credential-handling, and verification patterns, and for a direct, working answer to our open question about driving an agent via Claude Code headlessly. Read-only, read by three subagents plus direct inspection.
+
+## A direct, working answer to our open Harness-driving question
+
+This framework genuinely does wrap Claude Code (and separately, Codex) headlessly as a working backend, in production, today, confirmed by real example configurations. This settles half of the open question from the earlier osmedeus audit: launching Claude Code as an opaque, env-configured, budget-capped, wall-clock-limited process is an operationally proven pattern, not a hypothetical. But it settles the other half too, and not in our favor: the framework gives up all mid-run, per-action control, relying entirely on a network-level LLM-call budget and a timeout. If exhaust's Harness needs the per-action gating our Scope Contract, Oracle, and evidence-promotion ADRs all assume, that has to come from Claude Code's own native hook system specifically, not from this orchestration layer's pattern. The question isn't resolved by this audit, but it's now precisely scoped: not "can we drive Claude Code headlessly" (yes, proven), but "does the hook system give us what per-action gating needs" (a separate question, to answer against Claude Code's own documentation, not against this repo).
+
+## New decision
+
+**[ADR 0021](../adr/0021-agent-never-holds-the-real-llm-credential.md): the agent never holds the real LLM provider credential.** Every CRS this framework runs talks to a local LiteLLM proxy holding the real provider key; the agent's container gets a separate, budget-capped virtual key, handed to it as a mounted file rather than an environment variable specifically to resist leaking through logs, inherited environments, or `/proc`. A clean, adoptable pattern for exhaust's own credential handling and budget enforcement.
+
+## Reinforced, not new
+
+**Even a domain with a cheap, natural Oracle still needs the gate to be mandatory, not merely available.** Fuzzing and patching has what web-vulnerability claims don't: a real, falsifiable check (rebuild the target, re-run the crashing input, run the test suite) that's cheap to run. This framework provides exactly those primitives. But its actual submission call accepts any file regardless of whether those checks were ever invoked; the verify-then-submit sequence exists only as a convention followed in an example script, not as something the framework's own acceptance point enforces. It even fails open: a patch with no test script passes automatically, logged as "skipped-success." Folded into [ADR 0010](../adr/0010-evidence-promotion-is-parent-trusted.md) as the sharpest version of that lesson found yet: having a cheap Oracle available changes nothing if the one function that accepts a result doesn't itself require it to have run.
+
+**A genuinely well-built resource-isolation pattern, worth copying with its real gaps noted.** Per-run cgroup v2 isolation (a unique cgroup tree per run, hard memory limits with swap disabled, cpuset allocation via clean, testable pure functions, and a preflight check that returns an actionable message rather than failing mid-run) is a solid reference for exhaust's own Sandbox resource management. Real gaps worth not copying: the build phase gets no isolation at all, only the run phase does; nothing checks that the sum of resource limits across concurrently running instances actually fits the host; and at least one failure path silently discards the reason a cgroup setup failed rather than surfacing it.
+
+## Noted, not adopted
+
+**The scope-authorization question genuinely doesn't carry over to this domain, and that's worth being precise about rather than treating as another confirmation of the gap.** This framework has no allowlist or authorization concept at all, but its Targets are open-source repositories the operator already chose and cloned; the real trust question is "do I trust this CRS's code and its container images," not "am I authorized to touch this system." Exhaust's Scope Contract problem is harder specifically because our Targets can be live, third-party, and actively hostile. Worth remembering as a genuine point of domain contrast, not evidence either way about ADR 0003.
+
+## What this settled for exhaust
+
+- [ADR 0021](../adr/0021-agent-never-holds-the-real-llm-credential.md): the agent never holds the real LLM provider credential; it arrives as a mounted file, not an environment variable.
+- [ADR 0010](../adr/0010-evidence-promotion-is-parent-trusted.md) sharpened: a cheap Oracle being available is not the same as it being mandatory; the acceptance point itself must require it.
+- The open Harness-driving question from the osmedeus audit is narrowed, not closed: headless Claude Code as a backend is proven viable; whether per-action gating is achievable through its native hooks remains to be checked directly.

@@ -1,0 +1,17 @@
+# Audit: xbow-engineering/validation-benchmarks
+
+Source: [github.com/xbow-engineering/validation-benchmarks](https://github.com/xbow-engineering/validation-benchmarks). The actual XBOW benchmark referenced secondhand by three tools already audited in this series (T3MP3ST, Strix, and Shannon all cite a "96%" figure against this benchmark set). Worth checking directly, since the verification-gap meta-analysis's sharpest finding was that "the oracle lives in the harness, not the tool." A flat collection of 104 Docker-Compose-based web CTF challenges, each with one planted vulnerability and a build-time-injected flag.
+
+## The headline finding: the benchmark's own maintainers say it no longer measures anything
+
+The README states this plainly, as a warning at the very top: "these benchmarks are now outdated... as of mid-2026, these benchmarks are saturated, and the underlying vulnerabilities have been trained into the models... industry-standard performance against this benchmark set is now approximately 100%, and it is no longer useful for discriminating between models or attack frameworks... kept for historical purposes only." This is the primary source directly confirming the memorization concern already flagged in the verification-gap meta-analysis, and it means every "96% on XBOW" figure cited by the tools audited in this series was measured against a benchmark its own creator says has since become meaningless for exactly that purpose. Not a reason to distrust those tools specifically beyond what was already found; a reason to never treat this specific percentage, from any source, as evidence of real-world capability again.
+
+## Confirms the mechanism, no new decision needed
+
+The benchmark's own design matches exactly what the earlier audits inferred: one Docker Compose service per challenge, one planted vulnerability, a flag injected as a build argument at build time (never hardcoded), and a win condition of either `flag` or `question`. A sample challenge's metadata is a flat JSON file: name, a short human-readable description, a difficulty level, the win condition, and a tag list drawn from a fixed vocabulary (this sample: `idor`, `default_credentials`). The benchmark also embeds canary strings (Alignment Research Center's MAPS convention) specifically asking that the benchmark data never appear in model training corpora, a detail that makes the "now saturated" warning land harder: the benchmark creators tried to prevent exactly the contamination that happened anyway.
+
+This confirms, rather than changes, [ADR 0014](../adr/0014-eval-uses-blind-held-out-ground-truth.md): the flag-injection design itself is sound and matches what we already decided (a freshly generated secret per run, checked by exact match), the lesson here is entirely about the *corpus* going stale, not the *mechanism*. A fixture set exhaust builds needs the same discipline this project tried and failed to maintain: rotate or regenerate challenges periodically, since any fixed, public benchmark corpus eventually gets memorized regardless of how carefully its creators tried to prevent it.
+
+## What this settled for exhaust
+
+Nothing new decided. The flag-injection mechanism is confirmed sound; the lesson is entirely about corpus staleness, already implicit in ADR 0014's "rotate fixtures so nothing gets tuned against it" but now backed by a primary source watching it happen to the exact benchmark three audited tools built their headline marketing claims on.
