@@ -1,0 +1,5 @@
+# The Rig wraps a pinned external tool catalog, not from-scratch reimplementations
+
+The Rig is built around a catalog of existing, well-known security tools (recon scanners, template-based vuln checkers, credential checkers, and the like), each pinned to a specific version and installed from its own upstream release, not reimplemented in exhaust's own code. Each tool gets a uniform wrapper (name, usage, a pointer to its own doc, a run function) so the agent sees one consistent shape regardless of which tool is underneath.
+
+cyber-harness does this with `arsenal.yaml`, a data file pinning version, source repository, release-asset pattern, and platform for a long list of external binaries (including several already in the user's own Nix lab module), installed by a small manager rather than hand-rolled. Reimplementing recon and scanning primitives that mature, actively maintained tools already do well would be wasted effort and a maintenance burden with no offsetting benefit; exhaust's job is to make those tools callable and coherent to an agent, not to replace them.
