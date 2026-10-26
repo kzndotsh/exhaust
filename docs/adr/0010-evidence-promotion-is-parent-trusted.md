@@ -1,0 +1,5 @@
+# Evidence promotion is parent-trusted, never agent-written
+
+An investigating agent only ever writes to its own scratch space. Nothing it writes becomes part of a Finding's permanent evidence directly. A separate, trusted step the Harness itself runs copies allowlisted files out of that scratch space into the Finding's retained evidence, rejecting symlinks, checking file identity and size, and re-checking the file after the copy completes.
+
+Cloudflare's security-audit-skill does exactly this (agent scratch directories, parent-only promotion with no-follow and link-count checks) to keep agent-produced output from becoming untrusted evidence just because the agent claims it proves something. An agent under adversarial pressure from a hostile Target, or simply mistaken, should not be able to plant whatever file it wants into a Finding's permanent record by writing to the right path. The promotion step is the chokepoint that keeps the Harness, not the agent, in control of what counts as evidence.
