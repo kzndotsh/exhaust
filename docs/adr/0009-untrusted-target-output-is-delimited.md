@@ -1,0 +1,5 @@
+# Untrusted Target output is delimited distinctly in agent prompts
+
+Any content that originates from the Target itself (an HTTP response body, an error page, a header, log output) is wrapped in a distinct, nonce-style delimiter when it is placed into an agent's prompt, so the agent has an explicit signal that this text is data from the thing under attack, never an instruction to follow.
+
+Exhaust's agent actively probes a live Target and reads back whatever that Target returns. A Target is not a passive source file; it is attacker-controlled by construction, and a real pentest surface already includes planting a prompt injection in an application's own responses to confuse the attacking agent. Anthropic's reference harness already carries this exact pattern (a dedicated module for untrusted-content delimiters) for a narrower reason (keeping tool output distinct from instructions); exhaust needs it for a stronger one, since the Target is specifically trying to be hostile toward whatever reads its output, including our own agent.
