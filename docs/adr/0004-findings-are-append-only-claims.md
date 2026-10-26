@@ -1,0 +1,7 @@
+# Findings are append-only claims, not deletable records
+
+A Finding is one JSON record per claimed weakness, keyed by a deterministic id derived from the Target, the vertical, and the claim. Findings are never deleted. A later verdict (confirmed, false-positive, duplicate, fixed, accepted-risk) is recorded on the Finding alongside the original severity, and a manual accepted-risk marker is never silently overwritten by automation. Each Finding also carries a repro/evidence block and a scope field recording whether it was demonstrated against the Sandbox or the real Target, tying it to that Workspace's Scope Contract.
+
+This is a direct adoption of a pattern audited in vercel-labs/deepsec's processor package: verdicts stored on the finding rather than deletion, with a full per-invocation audit trail kept for later re-scoring. For an autonomous agent doing security research, silently erasing a finding is unacceptable, and a human needs to be able to override a verdict (accepted-risk) in a way the agent can never undo on its own.
+
+We deliberately did not adopt deepsec's file-centric store (one record per source file, keyed by file hash, for incremental rescans of a static codebase) or its multi-phase reconciliation machinery (matching revalidation verdicts back to findings across separate scan/process/revalidate runs). Exhaust's unit is a finding against a live Target probed through a Sandbox, not a file in a tree, and v1's Harness is a single loop, not a multi-phase pipeline that needs to re-match results across runs.
