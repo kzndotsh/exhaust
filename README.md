@@ -11,10 +11,10 @@ To exhaust a Target is to work through every known angle of attack until the opt
 The project is past the idea-sharpening stage and into recording real architecture decisions, but nothing has been built yet. What exists today:
 
 - **[GLOSSARY.md](GLOSSARY.md)** — the project's vocabulary: Target, Workspace, Sandbox, Rig, Scope Contract, Brief, Finding, Verdict, Oracle, Harness, Disclosure. Read this first; the rest of the docs assume it.
-- **[docs/adr/](docs/adr/)** — 17 architecture decision records, covering the Harness's design, how findings are stored and verified, how the methodology spine is shaped, and the safety boundaries around testing a real Target.
+- **[docs/adr/](docs/adr/)** — 22 architecture decision records, covering the Harness's design, how findings are stored and verified, how the Playbook is shaped, and the safety boundaries around testing a real Target.
 - **[docs/research/](docs/research/)** — audits of a dozen comparable tools (security-research harnesses, pentest platforms, skill libraries, and one general-purpose agent platform), each distilling what to adopt, what to reject, and why. These are what most of the ADRs are built on.
 
-Not yet decided: the exact methodology spine (the list of verticals an agent works through per Target) and the skills themselves. That's the next piece of design work.
+Not yet decided: the exact Playbook (the full list of verticals an agent works through per Target) and the skills themselves. That's the next piece of design work.
 
 ## Core ideas so far
 
