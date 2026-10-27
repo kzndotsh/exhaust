@@ -22,10 +22,62 @@ packages = ["src/exhaust"]
 dev = [
     "pytest>=8.0",
     "import-linter>=2.1",
+    "ruff>=0.13",
+    "basedpyright>=1.40",
+    "pydoclint>=0.7.3",
+    "types-pyyaml>=6.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "I", "UP", "B", "SIM", "RUF", "N", "C4", "PTH", "RET",
+    "PIE", "Q", "ARG", "PERF", "ANN", "TRY", "T20", "D",
+]
+ignore = [
+    "D203",  # one-blank-line-before-class: conflicts with D211, which we want
+    "D213",  # multi-line-summary-second-line: conflicts with D212, which we want
+    "B008",  # function-call-in-default-argument: Typer's own API requires this
+    "TRY003", # vanilla exception messages: the message carries the real detail
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "D",    # test names carry the intent, not docstrings
+    "ANN",  # fixtures and test bodies don't need annotations
+    "ARG",  # pytest fixtures are often unused by name
+]
+
+[tool.ruff.format]
+indent-style = "space"
+line-ending = "lf"
+quote-style = "double"
+
+[tool.pydoclint]
+style = "numpy"
+exclude = ["tests"]
+arg-type-hints-in-docstring = true
+arg-type-hints-in-signature = true
+check-return-types = true
+skip-checking-short-docstrings = true
+
+[tool.basedpyright]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "strict"
+include = ["src", "tests"]
+exclude = [".venv", "**/__pycache__"]
 
 [tool.importlinter]
 root_package = "exhaust"
