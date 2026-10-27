@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from exhaust.evidence import (
+    EvidenceAlreadyExistsError,
     EvidenceCopyVerificationError,
     EvidenceFileMissingError,
     PathEscapesScratchError,
@@ -83,6 +84,49 @@ def test_path_traversal_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(PathEscapesScratchError):
         promote_evidence(scratch, Path("../secret.txt"), evidence_dir)
+
+
+def test_symlinked_intermediate_directory_is_rejected(tmp_path: Path) -> None:
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "passwd").write_text("not actually agent evidence")
+    (scratch / "subdir").symlink_to(outside)
+    evidence_dir = tmp_path / "evidence"
+
+    with pytest.raises(SymlinkEvidenceError):
+        promote_evidence(scratch, Path("subdir/passwd"), evidence_dir)
+
+
+def test_files_with_the_same_basename_in_different_subdirs_dont_collide(
+    tmp_path: Path,
+) -> None:
+    scratch = tmp_path / "scratch"
+    (scratch / "requests").mkdir(parents=True)
+    (scratch / "responses").mkdir(parents=True)
+    (scratch / "requests" / "poc.py").write_text("request evidence")
+    (scratch / "responses" / "poc.py").write_text("response evidence")
+    evidence_dir = tmp_path / "evidence"
+
+    first = promote_evidence(scratch, Path("requests/poc.py"), evidence_dir)
+    second = promote_evidence(scratch, Path("responses/poc.py"), evidence_dir)
+
+    assert first != second
+    assert first.read_text() == "request evidence"
+    assert second.read_text() == "response evidence"
+
+
+def test_promoting_the_same_path_twice_is_rejected(tmp_path: Path) -> None:
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    (scratch / "poc.py").write_text("original")
+    evidence_dir = tmp_path / "evidence"
+
+    promote_evidence(scratch, Path("poc.py"), evidence_dir)
+
+    with pytest.raises(EvidenceAlreadyExistsError):
+        promote_evidence(scratch, Path("poc.py"), evidence_dir)
 
 
 def test_verification_catches_a_copy_that_doesnt_match_the_source(
