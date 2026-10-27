@@ -51,10 +51,22 @@ class MethodInfo:
         Whether invoking it can change anything. `call` itself doesn't
         gate on this; the Harness decides whether a mutating call is
         allowed, using this as the signal to decide with.
+    consequential : bool
+        Whether a call to this method against a real Target needs a
+        human's approval before it runs (ADR 0023). Declared here, at
+        the bridge's own enumerated method list, for the same reason
+        `mutates` is: the bridge author already knows which of their
+        tool's operations carry real-world weight, and `call` itself
+        still doesn't gate on it — the Harness does, using this as the
+        signal. Independent of `mutates`: a harmless Sandbox-only write
+        can mutate without being consequential, and a non-mutating but
+        intrusive real-Target probe can be consequential without
+        mutating anything.
     """
 
     name: str
     mutates: bool
+    consequential: bool
 
 
 @dataclass(frozen=True)
@@ -122,6 +134,57 @@ def tools(bridges: Mapping[str, ToolBridge]) -> list[ToolInfo]:
     return [bridge.info for bridge in bridges.values()]
 
 
+def _resolve_method(bridges: Mapping[str, ToolBridge], tool: str, method: str) -> MethodInfo:
+    """Look up one bridge's declared metadata for `method`, without invoking it.
+
+    Shared by `call` and `method_info` so a method name is validated the
+    same way regardless of which one a caller uses.
+
+    Raises
+    ------
+    UnknownToolError
+        If `tool` has no registered bridge.
+    UnknownMethodError
+        If `method` isn't in that bridge's `methods`.
+    """
+    bridge = bridges.get(tool)
+    if bridge is None:
+        raise UnknownToolError(tool)
+
+    for info in bridge.methods:
+        if info.name == method:
+            return info
+
+    raise UnknownMethodError(f"{tool}.{method}")
+
+
+def method_info(bridges: Mapping[str, ToolBridge], tool: str, method: str) -> MethodInfo:
+    """Look up one method's declared metadata, e.g. to check `consequential` (ADR 0023).
+
+    Parameters
+    ----------
+    bridges : Mapping[str, ToolBridge]
+        Every registered bridge, keyed by tool name.
+    tool : str
+        Which bridge to look up.
+    method : str
+        Which of that bridge's closed, named methods to look up.
+
+    Returns
+    -------
+    MethodInfo
+        That method's declared metadata.
+
+    Raises
+    ------
+    UnknownToolError
+        If `tool` has no registered bridge.
+    UnknownMethodError
+        If `method` isn't in that bridge's `methods`.
+    """
+    return _resolve_method(bridges, tool, method)
+
+
 def call(bridges: Mapping[str, ToolBridge], tool: str, method: str, **params: Any) -> ToolResult:
     """Invoke one method on one tool, the only way through to any bridge.
 
@@ -148,11 +211,5 @@ def call(bridges: Mapping[str, ToolBridge], tool: str, method: str, **params: An
     UnknownMethodError
         If `method` isn't in that bridge's `methods`.
     """
-    bridge = bridges.get(tool)
-    if bridge is None:
-        raise UnknownToolError(tool)
-
-    if method not in {m.name for m in bridge.methods}:
-        raise UnknownMethodError(f"{tool}.{method}")
-
-    return bridge.run(method, **params)
+    _resolve_method(bridges, tool, method)
+    return bridges[tool].run(method, **params)

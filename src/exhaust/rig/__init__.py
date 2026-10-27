@@ -8,6 +8,7 @@ from exhaust.rig.bridges import (
     UnknownMethodError,
     UnknownToolError,
     call,
+    method_info,
     tools,
 )
 from exhaust.rig.catalog import PINNED_TOOLS, PinnedTool
@@ -22,5 +23,6 @@ __all__ = [
     "UnknownMethodError",
     "UnknownToolError",
     "call",
+    "method_info",
     "tools",
 ]
