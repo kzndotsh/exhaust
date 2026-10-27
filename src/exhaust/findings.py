@@ -49,6 +49,21 @@ class RecordedBy(StrEnum):
     HUMAN = "human"
 
 
+# Every VerdictType that closes a Finding. needs_confirmation is the one
+# exception (ADR 0019): it exists precisely to leave a Finding open pending
+# more evidence, so a vertical can't be reported exhausted while one is
+# outstanding.
+TERMINAL_VERDICT_TYPES = frozenset(
+    {
+        VerdictType.CONFIRMED,
+        VerdictType.FALSE_POSITIVE,
+        VerdictType.DUPLICATE,
+        VerdictType.FIXED,
+        VerdictType.ACCEPTED_RISK,
+    }
+)
+
+
 class FindingAlreadyExistsError(ValueError):
     """Raised when recording a Finding whose id is already on file."""
 
