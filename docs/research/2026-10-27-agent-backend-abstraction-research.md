@@ -215,6 +215,15 @@ https://pi.dev/docs/latest.md, https://pi.dev/docs/latest/how-pi-works.md,
 https://pi.dev/docs/latest/sdk.md, https://pi.dev/docs/latest/rpc.md,
 https://pi.dev/docs/latest/security.md.
 
+**Correction (2026-10-27, dedicated follow-up pass):** the "no synchronous per-call approval
+hook at all" claim above is wrong. This pass never fetched `extensions.md`, where Pi's actual
+gate lives: `pi.on("tool_call", ...)` fires before a tool executes, can block with a reason, and
+fails closed on a throwing handler — confirmed against both the docs and the dispatch source
+itself, and attachable to an embedded SDK session via `resourceLoader`/`extensionFactories`, not
+just the CLI. Pi belongs in the same tier as Claude Agent SDK's `canUseTool`, not at the bottom
+of this survey. See [`2026-10-27-pi-harness-audit.md`](2026-10-27-pi-harness-audit.md) for the
+full corrected treatment.
+
 **fx (`fx.sh`, Vercel Labs, a sibling project to `deepsec` covered in the harness-engineering
 audit's §4).** A coding agent written in Zig, shipped as a single native binary with no runtime
 dependency, explicitly positioned to "run the same way on a laptop, in CI, or in an agent

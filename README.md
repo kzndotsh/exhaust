@@ -75,7 +75,7 @@ The design is ahead of the code. Start here if you want the reasoning, not just 
 
 - **[GLOSSARY.md](GLOSSARY.md)** — the vocabulary: Target, Workspace, Sandbox, Rig, Scope Contract, Brief, Finding, Verdict, Oracle, Playbook, Vertical, Harness, Disclosure.
 - **[docs/adr/](docs/adr/)** — 24 architecture decision records, each a specific, evidenced call: how findings are verified, how the Playbook is shaped, the safety boundaries around testing a real Target, when a consequential action waits for a human, what extent of testing a Scope Contract actually authorizes.
-- **[docs/research/](docs/research/)** — 27 audits of comparable tools (security-research harnesses, pentest platforms, skill libraries), plus dedicated audits of the agent-backend landscape, harness-engineering principles, and LiteLLM, each stating plainly what exhaust adopted, rejected, and why. Most of the ADRs are built on these.
+- **[docs/research/](docs/research/)** — 27 audits of comparable tools (security-research harnesses, pentest platforms, skill libraries), plus dedicated audits of the agent-backend landscape, harness-engineering principles, LiteLLM, and the Pi coding-agent toolkit, each stating plainly what exhaust adopted, rejected, and why. Most of the ADRs are built on these.
 
 ## Responsible use
 
