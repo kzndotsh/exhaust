@@ -46,6 +46,7 @@ uv run exhaust catalog check
 - **A per-vertical ledger, not a heuristic, decides when a Workspace is done.** Every vertical carries an explicit state, and leaving `blocked` is never silent ([ADR 0005](docs/adr/0005-harness-done-is-a-per-vertical-ledger.md), [ADR 0015](docs/adr/0015-crash-mid-real-target-action-blocks-not-retries.md)). [`src/exhaust/ledger.py`](src/exhaust/ledger.py)
 - **The Rig wraps pinned external tools behind one call gate.** A method not on a tool's own closed list is refused before the tool ever runs ([ADR 0012](docs/adr/0012-rig-wraps-a-pinned-tool-catalog.md), [ADR 0018](docs/adr/0018-tool-bridges-expose-a-narrow-enumerated-surface.md)). No tools are pinned yet. [`src/exhaust/rig/`](src/exhaust/rig/)
 - **The Harness is the one chokepoint between an agent's proposed actions and the privileged domain calls they trigger** ([ADR 0001](docs/adr/0001-agent-first-design.md), [ADR 0007](docs/adr/0007-verdicts-are-recorded-through-typed-tools.md)). Every `AgentAction` variant is wired up end to end: `SandboxCall` and `RealTargetCall` dispatch through the Rig, re-checking the Scope Contract for the latter; `SelfReport`'s exhaustion claims are checked against the Findings store and the attempt log, not taken on trust. [`src/exhaust/harness/`](src/exhaust/harness/)
+- **A consequential real-Target action or an exhaustion claim waits for a human, not just a scope check** ([ADR 0023](docs/adr/0023-consequential-real-target-actions-wait-for-a-human.md)). A Rig bridge marks its own methods consequential; a matching call is held as a pending approval, independent of the ledger's `blocked` state, until a human resolves it — and approving doesn't execute it, the agent has to propose it again. [`src/exhaust/approvals.py`](src/exhaust/approvals.py)
 
 ## Project layout
 
@@ -61,6 +62,7 @@ src/exhaust/
 ├── delimiter.py         # Wraps untrusted Target output (ADR 0009)
 ├── evidence.py          # Parent-trusted evidence promotion (ADR 0010)
 ├── attempts.py          # Per-vertical tool-attempt log, backs SelfReport checks (ADR 0005)
+├── approvals.py         # Pending human approvals for consequential actions (ADR 0023)
 ├── rig/                 # Pinned external tool catalog + the one call gate (ADR 0012, 0018)
 └── harness/             # Orchestrator; composes every domain module (ADR 0001, 0005, 0007)
 ```
