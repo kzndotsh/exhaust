@@ -12,6 +12,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --group dev
+      - name: Lint
+        run: uv run ruff check .
+      - name: Format
+        run: uv run ruff format --check .
+      - name: Docstrings (numpy style)
+        run: uv run pydoclint --config=pyproject.toml src
+      - name: Strict types
+        run: uv run basedpyright
       - run: uv run pytest
       - name: Import boundaries are respected
         run: uv run lint-imports
