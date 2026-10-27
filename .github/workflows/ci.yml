@@ -10,8 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --locked --group dev
+      - name: Conventional commit messages (PRs only)
+        if: github.event_name == 'pull_request'
+        run: |
+          git log --format=%s "${{ github.event.pull_request.base.sha }}..HEAD" | while read -r subject; do
+            printf '%s\n' "$subject" > /tmp/commit-subject.txt
+            uv run python scripts/check_commit_message.py /tmp/commit-subject.txt || exit 1
+          done
       - name: Lint
         run: uv run ruff check .
       - name: Format
