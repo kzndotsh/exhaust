@@ -2,6 +2,8 @@
 
 This is a draft for discussion, synthesized from three parallel reviews of every file in `docs/research/`, every ADR in `docs/adr/`, and `GLOSSARY.md`, then worked through in a grilling session. It is explicitly **not** the Playbook lock. Per standing instruction, the Playbook stays unlocked until you say the audit campaign is done, and in any case [ADR 0016](../adr/0016-no-hand-maintained-vertical-catalog.md) means this document can never *become* the Playbook's source of truth even once locked — see §1 for why, and §6 for what the real source of truth has to look like instead.
 
+A later cross-check of this draft against primary sources (OWASP WSTG, OWASP ASVS, PortSwigger's own taxonomy) is recorded in [docs/research/2026-10-26-playbook-proposal-cross-check.md](../research/2026-10-26-playbook-proposal-cross-check.md). Its findings are folded into §3, §4, and §7 below as flagged, undecided input — none of them resolve anything on their own.
+
 ## 0. Vocabulary (settled this round)
 
 - **Playbook** — the whole thing: a Workspace's full set of verticals. Was called "Spine" earlier in this project's own documents; renamed because "Playbook" carries the right metaphor on its own (a base set of plays everyone runs, plus situational ones called only when the game calls for them) without needing an explainer.
@@ -34,13 +36,16 @@ No `signature` field for now — community-contributed verticals are out of scop
 
 Multiple audits (PayloadsAllTheThings, Anthropic-Cybersecurity-Skills, Cloudflare, Shannon) refer to an existing 11-item baseline, confirmed in the committed research files themselves: **injection, access control, business logic, auth/session, SSRF, CSRF, deserialization, known-CVE, information disclosure, file handling, client-side**. This round added a twelfth: **race conditions**, given its own top-level, always-required slot rather than being folded into business logic — it's a technique that can hit any stateful operation (auth, access control, payments), not a business-logic-specific concern, so it clears the same "genuinely universal" bar the other required verticals do. No file anywhere declares this list canonical — it's only ever referenced in prose, which is itself consistent with ADR 0016 already being honored at the research-note level.
 
+**Flagged by the cross-check, not decided:** two categories every primary source treats as top-level and universal — configuration/deployment-management testing (OWASP WSTG 4.2, ASVS V13) and cryptography/TLS-weakness testing (WSTG 4.9, ASVS V11+V12) — appear nowhere in this document, not required, not reserved, not even declined. The cross-check also flags **deserialization** as a debatable fit for `required`: PortSwigger's own taxonomy places it under "Advanced," not universal server-side, and its real trigger (observing a serialized-object format on the wire) looks structurally like a `gate` condition rather than a `required` one, by ADR 0011's own bar. SSRF is noted as a softer version of the same question. None of this is acted on here; see §7.
+
 ## 4. Reserved (gated) verticals — names and gates only, detail on first real use
 
 Per this round's decision: these get a name and a `gate` now; the actual how-to-check-it procedure is written the first time a real Target actually needs it, not before.
 
 | Vertical | `gate` (recon-confirmed signal) |
 |---|---|
-| Proxy/transport parsing discrepancies (request smuggling, cache poisoning, part of the WebSocket surface) | A confirmed intermediary (reverse proxy, CDN, cache) observed in front of the Target via a header/behavior differential |
+| Request smuggling (front-end/back-end parsing discrepancy) | A confirmed intermediary (reverse proxy, CDN, LB) observed in front of the Target via a header/framing differential |
+| Cache poisoning | A confirmed caching layer observed in front of the Target (cache-control/vary behavior, cache-hit headers) |
 | GraphQL | A confirmed `/graphql`-equivalent endpoint responding to an introspection probe |
 | WebSocket | A confirmed WebSocket upgrade handshake observed in traffic |
 | Rate-limiting / brute-force | A confirmed unauthenticated or low-friction repeatable action (login, OTP, coupon) |
@@ -48,7 +53,11 @@ Per this round's decision: these get a name and a `gate` now; the actual how-to-
 | Supply chain (dependency confusion, exposed keys, SCM misconfig) | A confirmed CI/build pipeline or package-registry surface reachable/observable |
 | AI/LLM agent abuse | A confirmed LLM-backed endpoint (observed structured prompt/response behavior) |
 
+The original "proxy/transport parsing discrepancies" row above has been split in two per the cross-check: request smuggling and cache poisoning are triggered by different observable signals (an intermediary's parsing behavior vs. a caching layer's own behavior), so one gate was conflating two distinct trust boundaries. **DoS/ReDoS's gate is flagged as the weakest of the seven**: none of OWASP WSTG, ASVS, or PortSwigger model denial-of-service as a confirmable category the way the others are confirmable — WSTG has historically dropped DoS testing from its methodology for this reason. Still reserved here, but the gate signal itself is unresolved, not just unwritten. Supply chain's gate isn't checkable against these three sources either way, since DoS and dependency/supply-chain issues sit outside their scope.
+
 Cloudflare's further domain companions (memory-safety/kernel, desktop/IPC, cloud/IaC, protocols/RPC, resource exhaustion, data lifecycle) go past exhaust's actual hunting targets to date (Roundcube, Webmin, ispmanager, Mail-in-a-Box — server-side web apps). Not reserved yet; add only once recon on a real Target actually surfaces that trust boundary.
+
+**Also flagged by the cross-check, not reserved and not declined — simply absent:** HTTP Host header attacks (a PortSwigger "Advanced" topic, distinct from request smuggling since it needs no intermediary) and OAuth/JWT handling (ASVS gives each its own top-level chapter, V9 and V10). Both sit closer to exhaust's actual past targets than the Cloudflare companions above, which is exactly why their absence is worth naming here rather than letting it pass silently.
 
 File-upload-specific coverage and web-application-specific known-CVE coverage are confirmed thin everywhere, including in the best comparable library — not unique to us, but worth strengthening under the existing `file handling` and `known-CVE` required verticals rather than splitting out new ones.
 
@@ -71,7 +80,11 @@ A generator script, committed to the repo, written in Python (matching ADR 0002)
 4. **The exact shape of the "forced self-report turn" tool contract** (ADR 0005 + ADR 0007) — established that it must be a typed, Harness-validated call, not what it mechanically checks per vertical.
 5. **How deep sub-vertical decomposition goes** beyond the IDOR/BOLA/BFLA example ADR 0017 already names.
 6. **Whether/when the Playbook accepts community-contributed verticals at all** — settled as "not now" this round; revisit if that changes, since it decides whether the §2 schema needs a `signature` field.
+7. **Whether configuration/deployment testing and crypto/TLS testing belong in the Playbook at all**, and if so as required or gated — flagged by the cross-check as universal categories in every primary source checked, currently absent from this document entirely.
+8. **Whether deserialization (and, more weakly, SSRF) should move from required to gated** — flagged by the cross-check against PortSwigger's own "Advanced" grouping and ADR 0011's universality bar.
+9. **Whether Host header attacks and OAuth/JWT handling should join the reserved list** — flagged as closer to exhaust's actual target history than the Cloudflare companions already declined.
+10. **Whether the DoS/ReDoS gate signal is salvageable at all**, given that none of the three cross-checked primary sources model denial-of-service as a confirmable category.
 
 ## What this settled
 
-Vocabulary (Playbook, Vertical, `required`/`gate`), the ledger's `retryable`/`blocked` split, race conditions as a required vertical, seven reserved gated verticals (name + gate only), no community contributions for now, and a Python generator that runs both locally and in CI. Not locked: the full catalog, Oracle-mechanism mapping, and the self-report tool schema — all deliberately deferred to real implementation and real targets, not silently assumed.
+Vocabulary (Playbook, Vertical, `required`/`gate`), the ledger's `retryable`/`blocked` split, race conditions as a required vertical, seven reserved gated verticals (name + gate only, two of them split this round for a cleaner gate signal), no community contributions for now, and a Python generator that runs both locally and in CI. Not locked: the full catalog, Oracle-mechanism mapping, and the self-report tool schema — all deliberately deferred to real implementation and real targets, not silently assumed. Also not locked, and newly flagged rather than silently absent: config/crypto testing, deserialization's required-vs-gated fit, and Host-header/OAuth-JWT as reserved candidates.
