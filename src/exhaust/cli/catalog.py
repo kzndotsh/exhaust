@@ -6,7 +6,7 @@ import typer
 
 from exhaust.catalog import (
     DEFAULT_OUTPUT_RELATIVE_PATH,
-    MalformedSkillFile,
+    MalformedSkillFileError,
     is_catalog_up_to_date,
     write_catalog,
 )
@@ -24,7 +24,7 @@ def generate(
     """Regenerate the vertical catalog from skill files (ADR 0016)."""
     try:
         write_catalog(skills_dir, output)
-    except MalformedSkillFile as exc:
+    except MalformedSkillFileError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     typer.echo(f"Wrote {output}")
@@ -40,13 +40,12 @@ def check(
     """Fail if the committed catalog is out of sync with the skill files."""
     try:
         up_to_date = is_catalog_up_to_date(skills_dir, output)
-    except MalformedSkillFile as exc:
+    except MalformedSkillFileError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
     if not up_to_date:
         typer.echo(
-            f"{output} is out of sync with {skills_dir}; run 'exhaust catalog "
-            "generate'",
+            f"{output} is out of sync with {skills_dir}; run 'exhaust catalog generate'",
             err=True,
         )
         raise typer.Exit(code=1)
