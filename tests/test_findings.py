@@ -6,6 +6,7 @@ from exhaust.findings import (
     AcceptedRiskOverrideError,
     FindingAlreadyExistsError,
     FindingScope,
+    MissingOracleResultError,
     RecordedBy,
     UnknownFindingError,
     Verdict,
@@ -15,6 +16,11 @@ from exhaust.findings import (
     new_finding,
     record_finding,
     record_verdict,
+)
+from exhaust.oracle import OracleMechanism, OracleResult
+
+PASSING_ORACLE_RESULT = OracleResult(
+    mechanism=OracleMechanism.OUT_OF_BAND_CALLBACK, passed=True, detail="DNS hit observed"
 )
 
 
@@ -96,7 +102,13 @@ def test_verdict_history_is_append_only_and_ordered(tmp_path: Path) -> None:
         Verdict(type=VerdictType.NEEDS_CONFIRMATION, requirements="an Oracle run"),
         RecordedBy.AGENT,
     )
-    record_verdict(tmp_path, finding.id, Verdict(type=VerdictType.CONFIRMED), RecordedBy.AGENT)
+    record_verdict(
+        tmp_path,
+        finding.id,
+        Verdict(type=VerdictType.CONFIRMED),
+        RecordedBy.AGENT,
+        oracle_result=PASSING_ORACLE_RESULT,
+    )
 
     records = load_findings(tmp_path)
     history = records[0].history
@@ -106,6 +118,8 @@ def test_verdict_history_is_append_only_and_ordered(tmp_path: Path) -> None:
     ]
     assert records[0].latest is not None
     assert records[0].latest.verdict.type == VerdictType.CONFIRMED
+    assert records[0].latest.oracle_result is not None
+    assert records[0].latest.oracle_result.passed is True
 
 
 def test_agent_cannot_silently_overwrite_human_accepted_risk(tmp_path: Path) -> None:
@@ -168,3 +182,64 @@ def test_findings_are_loaded_in_first_recorded_order(tmp_path: Path) -> None:
 
 def test_load_findings_on_empty_workspace(tmp_path: Path) -> None:
     assert load_findings(tmp_path) == []
+
+
+def test_confirmed_without_oracle_result_is_rejected(tmp_path: Path) -> None:
+    finding = new_finding(
+        "roundcube", "injection", "SQLi in search", "high", FindingScope.SANDBOX, "poc.py"
+    )
+    record_finding(tmp_path, finding)
+
+    with pytest.raises(MissingOracleResultError):
+        record_verdict(tmp_path, finding.id, Verdict(type=VerdictType.CONFIRMED), RecordedBy.AGENT)
+
+
+def test_confirmed_with_a_failed_oracle_result_is_rejected(tmp_path: Path) -> None:
+    finding = new_finding(
+        "roundcube", "injection", "SQLi in search", "high", FindingScope.SANDBOX, "poc.py"
+    )
+    record_finding(tmp_path, finding)
+    failed = OracleResult(
+        mechanism=OracleMechanism.OUT_OF_BAND_CALLBACK, passed=False, detail="no callback observed"
+    )
+
+    with pytest.raises(MissingOracleResultError):
+        record_verdict(
+            tmp_path,
+            finding.id,
+            Verdict(type=VerdictType.CONFIRMED),
+            RecordedBy.AGENT,
+            oracle_result=failed,
+        )
+
+
+def test_confirmed_with_a_passing_oracle_result_is_recorded(tmp_path: Path) -> None:
+    finding = new_finding(
+        "roundcube", "injection", "SQLi in search", "high", FindingScope.SANDBOX, "poc.py"
+    )
+    record_finding(tmp_path, finding)
+
+    record_verdict(
+        tmp_path,
+        finding.id,
+        Verdict(type=VerdictType.CONFIRMED),
+        RecordedBy.AGENT,
+        oracle_result=PASSING_ORACLE_RESULT,
+    )
+
+    records = load_findings(tmp_path)
+    assert records[0].latest is not None
+    assert records[0].latest.oracle_result == PASSING_ORACLE_RESULT
+
+
+def test_non_confirmed_verdicts_dont_need_an_oracle_result(tmp_path: Path) -> None:
+    finding = new_finding(
+        "roundcube", "injection", "SQLi in search", "high", FindingScope.SANDBOX, "poc.py"
+    )
+    record_finding(tmp_path, finding)
+
+    record_verdict(tmp_path, finding.id, Verdict(type=VerdictType.FALSE_POSITIVE), RecordedBy.AGENT)
+
+    records = load_findings(tmp_path)
+    assert records[0].latest is not None
+    assert records[0].latest.oracle_result is None
