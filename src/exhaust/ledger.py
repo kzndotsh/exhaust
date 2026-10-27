@@ -37,21 +37,6 @@ class VerticalState(StrEnum):
 
 TERMINAL_STATES = frozenset({VerticalState.EXHAUSTED, VerticalState.SKIPPED})
 
-_STATES_REQUIRING_A_REASON = frozenset(
-    {VerticalState.RETRYABLE, VerticalState.BLOCKED, VerticalState.EXHAUSTED, VerticalState.SKIPPED}
-)
-
-_ALLOWED_TRANSITIONS: dict[VerticalState, frozenset[VerticalState]] = {
-    VerticalState.PENDING: frozenset({VerticalState.IN_PROGRESS, VerticalState.SKIPPED}),
-    VerticalState.IN_PROGRESS: frozenset(
-        {VerticalState.RETRYABLE, VerticalState.BLOCKED, VerticalState.EXHAUSTED}
-    ),
-    VerticalState.RETRYABLE: frozenset({VerticalState.IN_PROGRESS}),
-    VerticalState.BLOCKED: frozenset({VerticalState.IN_PROGRESS}),
-    VerticalState.EXHAUSTED: frozenset(),
-    VerticalState.SKIPPED: frozenset(),
-}
-
 
 class ResumedBy(StrEnum):
     """Who is resuming a `blocked` vertical: the agent, or a human."""
@@ -60,8 +45,61 @@ class ResumedBy(StrEnum):
     HUMAN = "human"
 
 
+@dataclass(frozen=True)
+class _TransitionRule:
+    """What's required to make one specific transition.
+
+    Attributes
+    ----------
+    reason_required : bool
+        Whether this transition must carry a reason.
+    requires_human : bool
+        Whether this transition must be resumed by a human (ADR 0015).
+    """
+
+    reason_required: bool
+    requires_human: bool
+
+
+# The whole state machine in one place: every legal transition, and what
+# each one requires. A transition absent from its from-state's dict is not
+# allowed. Keeping this as one table, rather than a separate "allowed
+# destinations" set plus a separate "needs a reason" set plus an inline
+# if-branch for the blocked-resume case, means a new state's rules can't
+# half-update: there is exactly one place per transition to get right.
+_TRANSITIONS: dict[VerticalState, dict[VerticalState, _TransitionRule]] = {
+    VerticalState.PENDING: {
+        VerticalState.IN_PROGRESS: _TransitionRule(reason_required=False, requires_human=False),
+        VerticalState.SKIPPED: _TransitionRule(reason_required=True, requires_human=False),
+    },
+    VerticalState.IN_PROGRESS: {
+        VerticalState.RETRYABLE: _TransitionRule(reason_required=True, requires_human=False),
+        VerticalState.BLOCKED: _TransitionRule(reason_required=True, requires_human=False),
+        VerticalState.EXHAUSTED: _TransitionRule(reason_required=True, requires_human=False),
+    },
+    VerticalState.RETRYABLE: {
+        VerticalState.IN_PROGRESS: _TransitionRule(reason_required=False, requires_human=False),
+    },
+    VerticalState.BLOCKED: {
+        VerticalState.IN_PROGRESS: _TransitionRule(reason_required=False, requires_human=True),
+    },
+    VerticalState.EXHAUSTED: {},
+    VerticalState.SKIPPED: {},
+}
+
+
 class InvalidTransitionError(ValueError):
     """Raised when a transition isn't legal from the vertical's current state."""
+
+
+class AlreadyTerminalError(InvalidTransitionError):
+    """Raised when transitioning a vertical that's already terminal.
+
+    A subclass of `InvalidTransitionError`, so existing callers that
+    catch the base class still catch this; a caller that wants to treat
+    "already done" differently from "that transition doesn't exist" can
+    catch this specifically.
+    """
 
 
 class ReasonRequiredError(ValueError):
@@ -78,8 +116,6 @@ class LedgerEntry:
 
     Attributes
     ----------
-    vertical : str
-        The vertical's name.
     state : VerticalState
         Its current state.
     reason : str | None
@@ -87,9 +123,11 @@ class LedgerEntry:
         `pending` and `in_progress`.
     """
 
-    vertical: str
     state: VerticalState
     reason: str | None
+
+
+_PENDING_ENTRY = LedgerEntry(state=VerticalState.PENDING, reason=None)
 
 
 def _ledger_path(workspace_dir: Path) -> Path:
@@ -115,11 +153,7 @@ def load_ledger(workspace_dir: Path) -> dict[str, LedgerEntry]:
         return {}
     data: dict[str, Any] = json.loads(path.read_text())
     return {
-        name: LedgerEntry(
-            vertical=name,
-            state=VerticalState(entry["state"]),
-            reason=entry.get("reason"),
-        )
+        name: LedgerEntry(state=VerticalState(entry["state"]), reason=entry.get("reason"))
         for name, entry in data.items()
     }
 
@@ -130,7 +164,14 @@ def _save_ledger(workspace_dir: Path, ledger: dict[str, LedgerEntry]) -> None:
     data = {
         name: {"state": entry.state.value, "reason": entry.reason} for name, entry in ledger.items()
     }
-    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+    rendered = json.dumps(data, indent=2, sort_keys=True) + "\n"
+
+    # Write-to-temp-then-rename: Path.replace is atomic on the same
+    # filesystem, so a crash mid-write never leaves ledger.json truncated,
+    # and a concurrent reader never observes a partial file.
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    tmp_path.write_text(rendered)
+    tmp_path.replace(path)
 
 
 def current_state(workspace_dir: Path, vertical: str) -> VerticalState:
@@ -148,8 +189,7 @@ def current_state(workspace_dir: Path, vertical: str) -> VerticalState:
     VerticalState
         Its current state.
     """
-    entry = load_ledger(workspace_dir).get(vertical)
-    return entry.state if entry is not None else VerticalState.PENDING
+    return load_ledger(workspace_dir).get(vertical, _PENDING_ENTRY).state
 
 
 def transition(
@@ -179,27 +219,32 @@ def transition(
 
     Raises
     ------
+    AlreadyTerminalError
+        If the vertical's current state is already terminal.
     InvalidTransitionError
-        If `to` isn't reachable from the vertical's current state, or
-        the current state is already terminal.
+        If `to` isn't reachable from the vertical's current state.
     ReasonRequiredError
         If `to` requires a reason and none was given.
     HumanResumeRequiredError
         If resuming from `blocked` without `resumed_by=ResumedBy.HUMAN`.
     """
     ledger = load_ledger(workspace_dir)
-    from_state = ledger[vertical].state if vertical in ledger else VerticalState.PENDING
+    from_state = ledger.get(vertical, _PENDING_ENTRY).state
 
-    if from_state in TERMINAL_STATES or to not in _ALLOWED_TRANSITIONS[from_state]:
+    if from_state in TERMINAL_STATES:
+        raise AlreadyTerminalError(f"{vertical}: already {from_state}")
+
+    rule = _TRANSITIONS[from_state].get(to)
+    if rule is None:
         raise InvalidTransitionError(f"{vertical}: {from_state} -> {to} is not allowed")
 
-    if to in _STATES_REQUIRING_A_REASON and not reason:
+    if rule.reason_required and not reason:
         raise ReasonRequiredError(f"{vertical}: moving to {to} requires a reason")
 
-    if from_state == VerticalState.BLOCKED and resumed_by != ResumedBy.HUMAN:
-        raise HumanResumeRequiredError(f"{vertical}: resuming from blocked requires a human")
+    if rule.requires_human and resumed_by != ResumedBy.HUMAN:
+        raise HumanResumeRequiredError(f"{vertical}: resuming from {from_state} requires a human")
 
-    ledger[vertical] = LedgerEntry(vertical=vertical, state=to, reason=reason)
+    ledger[vertical] = LedgerEntry(state=to, reason=reason)
     _save_ledger(workspace_dir, ledger)
 
 
@@ -223,4 +268,7 @@ def is_workspace_done(workspace_dir: Path, verticals: list[str]) -> bool:
         A vertical with no ledger entry yet is implicitly `pending`,
         which is never done.
     """
-    return all(current_state(workspace_dir, vertical) in TERMINAL_STATES for vertical in verticals)
+    ledger = load_ledger(workspace_dir)
+    return all(
+        ledger.get(vertical, _PENDING_ENTRY).state in TERMINAL_STATES for vertical in verticals
+    )
