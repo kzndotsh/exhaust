@@ -112,6 +112,8 @@ modules = [
     "exhaust.catalog",
     "exhaust.findings",
     "exhaust.ledger",
+    "exhaust.delimiter",
+    "exhaust.evidence",
 ]
 
 [[tool.importlinter.contracts]]
@@ -123,6 +125,8 @@ modules = [
     "exhaust.catalog",
     "exhaust.oracle",
     "exhaust.ledger",
+    "exhaust.delimiter",
+    "exhaust.evidence",
 ]
 
 [[tool.importlinter.contracts]]
@@ -145,6 +149,8 @@ source_modules = [
     "exhaust.findings",
     "exhaust.oracle",
     "exhaust.ledger",
+    "exhaust.delimiter",
+    "exhaust.evidence",
 ]
 forbidden_modules = [
     "exhaust.cli",
