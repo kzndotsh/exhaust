@@ -21,7 +21,32 @@ packages = ["src/exhaust"]
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "import-linter>=2.1",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.importlinter]
+root_package = "exhaust"
+
+[[tool.importlinter.contracts]]
+name = "Domain modules are independent of each other"
+type = "independence"
+modules = [
+    "exhaust.workspace",
+    "exhaust.scope_contract",
+    "exhaust.catalog",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain modules never import the CLI"
+type = "forbidden"
+source_modules = [
+    "exhaust.workspace",
+    "exhaust.scope_contract",
+    "exhaust.catalog",
+]
+forbidden_modules = [
+    "exhaust.cli",
+]
