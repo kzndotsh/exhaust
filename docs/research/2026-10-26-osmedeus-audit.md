@@ -25,5 +25,5 @@ Source: [github.com/j3ssie/osmedeus](https://github.com/j3ssie/osmedeus), cloned
 
 ## What this settled for exhaust
 
-- Nothing new decided; [ADR 0011](../adr/0011-spine-is-core-plus-gated-modules.md) (skills, not a declarative DSL) is reinforced by a repo that tried the DSL route and explicitly marked its own result as unproven.
+- Nothing new decided; [ADR 0011](../adr/0011-playbook-verticals-are-required-or-gated.md) (skills, not a declarative DSL) is reinforced by a repo that tried the DSL route and explicitly marked its own result as unproven.
 - A real open question surfaced for later, deliberate resolution: whether exhaust's Harness is an embedded agent loop, a specific CLI's native hook system, or a generic external-agent protocol, given that only the first two can support the per-action gating our other decisions assume.
