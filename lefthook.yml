@@ -1,0 +1,32 @@
+# Install with `uv run lefthook install`.
+#
+# pre-commit stays fast: lint and format on staged files only. The
+# slower gates (tests, strict types, import boundaries, the catalog
+# drift check) run on push instead, and in CI either way, so they're
+# never skipped, just not blocking every commit.
+
+pre-commit:
+  parallel: true
+  commands:
+    ruff-check:
+      glob: "*.py"
+      run: uv run ruff check {staged_files}
+    ruff-format:
+      glob: "*.py"
+      run: uv run ruff format --check {staged_files}
+    uv-lock:
+      glob: "pyproject.toml"
+      run: uv lock --check
+
+pre-push:
+  commands:
+    test:
+      run: uv run pytest
+    docstrings:
+      run: uv run pydoclint --config=pyproject.toml src
+    types:
+      run: uv run basedpyright
+    layers:
+      run: uv run lint-imports
+    catalog:
+      run: uv run exhaust catalog check

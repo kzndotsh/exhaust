@@ -26,6 +26,7 @@ dev = [
     "basedpyright>=1.40",
     "pydoclint>=0.7.3",
     "types-pyyaml>=6.0",
+    "lefthook>=1.8",
 ]
 
 [tool.pytest.ini_options]
