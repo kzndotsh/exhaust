@@ -394,17 +394,19 @@ class Harness:
         return result
 
     def _real_target_call(self, a: RealTargetCall) -> ActionOutcome:
-        # Re-checked here, not only when the agent proposed the call: the Scope
-        # Contract on disk is the live authority (ADR 0003), and a contract
-        # revoked mid-run must take effect before the next real-Target action,
-        # not merely before the next one the agent happens to propose.
-        if not is_in_scope(self._workspace_dir, a.target):
-            return ActionRejected(f"{a.target} is not an authorized Target for this Workspace")
-
         try:
             method = rig_method_info(self._bridges, a.tool, a.method)
         except (UnknownToolError, UnknownMethodError) as exc:
             return ActionRejected(str(exc))
+
+        # Re-checked here, not only when the agent proposed the call: the Scope
+        # Contract on disk is the live authority (ADR 0003), and a contract
+        # revoked or narrowed mid-run must take effect before the next
+        # real-Target action, not merely before the next one the agent
+        # happens to propose. The method's own required_extent (ADR 0024) is
+        # part of that check now, not just the target string.
+        if not is_in_scope(self._workspace_dir, a.target, method.required_extent):
+            return ActionRejected(f"{a.target} is not an authorized Target for this Workspace")
 
         if method.consequential:
             outcome = self._require_human_approval(
