@@ -12,7 +12,7 @@ A sampled CVE template ([CVE-2019-0192](http://github.com/projectdiscovery/nucle
 
 ## Reinforced, not new
 
-**Gate on a confirmed signal, not a keyword guess, now confirmed at industry scale.** This catalog's workflow files (for example `workflows/zimbra-workflow.yaml`) chain a cheap, narrow fingerprinting template first, and only fan out to that product's full template set once the fingerprint actually matches, never on a static keyword or dependency-name assumption. Folded into [ADR 0011](../adr/0011-spine-is-core-plus-gated-modules.md) as independent confirmation, from a tool run against millions of real targets, that our own recon-gated module design is the right shape, not merely the cautious one.
+**Gate on a confirmed signal, not a keyword guess, now confirmed at industry scale.** This catalog's workflow files (for example `workflows/zimbra-workflow.yaml`) chain a cheap, narrow fingerprinting template first, and only fan out to that product's full template set once the fingerprint actually matches, never on a static keyword or dependency-name assumption. Folded into [ADR 0011](../adr/0011-playbook-verticals-are-required-or-gated.md) as independent confirmation, from a tool run against millions of real targets, that our own recon-gated module design is the right shape, not merely the cautious one.
 
 ## Noted, not adopted
 
@@ -21,6 +21,6 @@ A sampled CVE template ([CVE-2019-0192](http://github.com/projectdiscovery/nucle
 ## What this settled for exhaust
 
 - [ADR 0022](../adr/0022-community-skill-content-is-signed-and-verified-before-use.md): new decision, community skill/template content must be signed and verified before use.
-- [ADR 0011](../adr/0011-spine-is-core-plus-gated-modules.md) reinforced: gating domain modules on a confirmed recon signal, not a keyword guess, is now confirmed by a scanner run at industry scale, not just by one audited skill library.
+- [ADR 0011](../adr/0011-playbook-verticals-are-required-or-gated.md) reinforced: gating domain modules on a confirmed recon signal, not a keyword guess, is now confirmed by a scanner run at industry scale, not just by one audited skill library.
 - [ADR 0008](../adr/0008-confirmed-requires-a-host-run-oracle.md) unchanged but strongly reinforced: the out-of-band-callback Oracle mechanism is found running in production in the industry's own standard scanner templates, not just argued for.
 - Methodology-spine taxonomy material for the eventual (still deliberately unlocked) vertical catalog, independently converging with prior sources.
