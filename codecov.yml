@@ -1,0 +1,11 @@
+# Codecov — coverage is a reviewer signal, not a merge gate.
+# Requires the repo to be connected at https://codecov.io/gh/kzndotsh/exhaust
+# before any of this actually reports anything; this file alone does nothing.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
