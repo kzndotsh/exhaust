@@ -62,11 +62,19 @@ class MethodInfo:
         can mutate without being consequential, and a non-mutating but
         intrusive real-Target probe can be consequential without
         mutating anything.
+    required_extent : str
+        The Scope Contract extent tier a real-Target call to this
+        method needs (ADR 0024): `"recon"` or `"full"`. A plain string,
+        not the `scope_contract` module's own enum, since `rig` and
+        `scope_contract` are independent domain modules that never
+        import each other; `scope_contract.is_in_scope` is the only
+        thing that interprets this value.
     """
 
     name: str
     mutates: bool
     consequential: bool
+    required_extent: str
 
 
 @dataclass(frozen=True)
