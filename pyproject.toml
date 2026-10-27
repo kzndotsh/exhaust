@@ -31,6 +31,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["scripts"]
 
 [tool.ruff]
 target-version = "py312"
@@ -58,6 +59,9 @@ convention = "numpy"
     "ANN",  # fixtures and test bodies don't need annotations
     "ARG",  # pytest fixtures are often unused by name
 ]
+"scripts/**" = [
+    "T20",  # a script reports its result by printing, on purpose
+]
 
 [tool.ruff.format]
 indent-style = "space"
@@ -77,8 +81,9 @@ pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
 typeCheckingMode = "strict"
-include = ["src", "tests"]
+include = ["src", "tests", "scripts"]
 exclude = [".venv", "**/__pycache__"]
+extraPaths = ["scripts"]
 
 [tool.importlinter]
 root_package = "exhaust"
