@@ -13,5 +13,7 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --group dev
       - run: uv run pytest
+      - name: Import boundaries are respected
+        run: uv run lint-imports
       - name: Vertical catalog is in sync (ADR 0016)
         run: uv run exhaust catalog check
