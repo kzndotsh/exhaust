@@ -13,6 +13,7 @@ before it will accept a `confirmed` Verdict.
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 
 class OracleMechanism(StrEnum):
@@ -47,3 +48,47 @@ class OracleResult:
     mechanism: OracleMechanism
     passed: bool
     detail: str
+
+
+def oracle_result_to_dict(oracle_result: "OracleResult | None") -> dict[str, Any] | None:
+    """Render an OracleResult as a plain dict for JSON storage, or None.
+
+    Parameters
+    ----------
+    oracle_result : OracleResult | None
+        The result to render.
+
+    Returns
+    -------
+    dict[str, Any] | None
+        A plain dict, or None if `oracle_result` was None.
+    """
+    if oracle_result is None:
+        return None
+    return {
+        "mechanism": oracle_result.mechanism.value,
+        "passed": oracle_result.passed,
+        "detail": oracle_result.detail,
+    }
+
+
+def oracle_result_from_dict(data: dict[str, Any] | None) -> "OracleResult | None":
+    """Reconstruct an OracleResult from the dict `oracle_result_to_dict` rendered.
+
+    Parameters
+    ----------
+    data : dict[str, Any] | None
+        The dict to reconstruct from, or None.
+
+    Returns
+    -------
+    OracleResult | None
+        The reconstructed result, or None if `data` was None.
+    """
+    if data is None:
+        return None
+    return OracleResult(
+        mechanism=OracleMechanism(data["mechanism"]),
+        passed=data["passed"],
+        detail=data["detail"],
+    )
