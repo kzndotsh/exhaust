@@ -1,0 +1,46 @@
+# Dependabot version updates.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # Matches ADR 0020's own cited precedent (a five-day cooldown caught a
+    # poisoned release another project in this space actually shipped).
+    # This covers Dependabot's own proposed bumps; it does not by itself
+    # give routine `uv add`/`uv sync` runs the same protection, which
+    # would need a uv-level `exclude-newer` policy as well.
+    cooldown:
+      default-days: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      dev-tooling:
+        patterns:
+          - "ruff"
+          - "basedpyright"
+          - "pydoclint"
+          - "import-linter"
+          - "lefthook"
+          - "types-*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: "github-actions"
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      actions:
+        patterns:
+          - "*"
