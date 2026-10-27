@@ -106,11 +106,28 @@ whatever's on the other end of the RPC pipe, instead of prompting a local termin
 That channel makes a specific integration shape possible: a thin gate extension, written in
 TypeScript, loaded into the Pi subprocess, whose `tool_call` handler calls `ctx.ui.confirm(...)`
 — which round-trips over the RPC JSON stream to exhaust's own Python harness process for the
-actual `AgentAction` validation, then returns `block`/`reason` back into Pi's dispatch. This is
-my own synthesis from the documented primitives, not a pattern pi.dev's docs name explicitly,
-and no third-party writeup of exactly this use (a gated, Python-driven embedder) turned up in
-this pass — flagged as unverified-by-example, though directly supported by what the RPC types
-and the extension API each separately document.
+actual `AgentAction` validation, then returns `block`/`reason` back into Pi's dispatch.
+
+**Confirmed, not just synthesized: `imrj05/orbit` ships exactly this pattern in production.**
+Orbit (130 stars, Apache-2.0, see §8) is a pure Rust/GPUI desktop client with zero Node, JS, or
+browser runtime anywhere in its own code, and it still achieves tool-call gating by bundling a
+small Pi extension (necessarily JS/TS, loaded by the `pi` CLI child process) that, per its own
+README's Safeguards section, "hooks `tool_call` and confirms mutating calls the mode does not
+auto-approve." Rust never implements the gate logic itself; it only renders the approval UI and
+answers over RPC. `crates/orbit-rpc/src/types.rs:284` confirms the exact wire shape:
+
+```rust
+/// Dialog methods (`select`/`confirm`/`input`/`editor`) expect an
+/// `extension_ui_response` on stdin with the matching `id`.
+ExtensionUiRequest { id: String, method: String, value: Value }
+```
+
+with `crates/orbit-pi/src/dialog.rs` documenting the response shape sent back:
+`confirm` → `{ "confirmed": bool }`, matched by `id`. This is a complete, shipping, non-JS
+client doing exactly what was proposed above as an unverified synthesis — only with Rust standing
+in for the role exhaust's Python harness would play. Orbit's own README is also directly honest
+about the trust boundary, independently reconfirming `security.md`: "A confirmation guard, not a
+sandbox — pi ships no sandbox, and Orbit does not add one."
 
 ## 5. How people actually hack and extend Pi
 
@@ -246,7 +263,165 @@ named: **Pi's current public SDK surface has real gaps that serious integrators 
 mirroring around right now**, which is an ongoing maintenance burden of embedding Pi, distinct
 from (and additional to) the language-boundary cost.
 
-## 7. What this means for exhaust's shape, concretely
+## 7. Eleven more community extensions — a fourth and fifth gate confirmation, and a real bypass
+
+A second research pass covered eleven more community repos the user linked directly. One
+housekeeping note first: `pi-rewind`'s README links to `github.com/badlogic/pi-mono` as "the Pi
+coding agent" — `gh repo view badlogic/pi-mono` resolves to `earendil-works/pi` (identical star
+count and push timestamp), confirming this is a GitHub ownership transfer/rename, not a second,
+competing "Pi" project. Worth knowing since older community READMEs still use the `badlogic` URL.
+
+**`Firstp1ck/pi-coding-agent-forge`** (92 stars, MIT, independent of earendil-works) is a large,
+unaffiliated collection of community extensions, and two of its sub-packages are directly
+load-bearing for this audit:
+
+- **`pi-extension-tools`** is a fourth independent confirmation of the `tool_call` gate, plus a
+  *new* enforcement point the earlier passes hadn't found: tool restriction at the declaration
+  layer, not just the call layer. Quoted from `index.ts`:
+  ```js
+  pi.on("tool_call", (event, ctx) => {
+    const isAllowed = enforceSelection(ctx);
+    if (isAllowed && !isAllowed(event.toolName)) {
+      return { block: true, reason: `Tool "${event.toolName}" is disabled by the effective /tools selection.` };
+    }
+  });
+  ```
+  It also hooks `context_with_system` to strip disallowed tools from what the model is even shown
+  (`toolsRemoved`/`toolsAdded` deltas) and `before_agent_start` to recompute the active selection
+  each turn — meaning Pi supports narrowing the agent's visible tool surface declaratively, a
+  second, complementary enforcement point alongside the `tool_call` gate that
+  [ADR 0018](../adr/0018-tool-bridges-expose-a-narrow-enumerated-surface.md)'s enumerated-bridge
+  design could use together with (not instead of) per-call gating.
+- **`pi-extension-small-modal-reliability`** independently reimplements almost exactly what
+  [ADR 0023](../adr/0023-consequential-real-target-actions-wait-for-a-human.md) specifies, from an
+  author with no connection to exhaust. Its approval system is keyed by a deterministic hash of
+  tool name plus canonically-serialized input (`hashToolCall`, SHA-256 over `stableStringify`'d
+  input), with its own doc comment stating the design intent in almost ADR-0023 language: "the
+  approval match is an exact host-normalized operation, never model prose." Approvals are
+  `pending`/`approved`/`expired` records that must re-match the exact normalized effect before
+  promotion — approving doesn't execute anything; the agent must re-propose the identical call,
+  exactly ADR 0023's stance. This is strong, convergent, independent validation of ADR 0023's
+  design, not just a passing similarity.
+
+**`AgwaB/pi-workflow`** (369 stars, MIT) is multi-step workflow orchestration — named, resumable,
+stoppable workflows fanning work across Pi subagent sessions, tracked to disk under `.pi/workflows`
+and surviving session reload. Structurally, this is close to what exhaust's own Harness does
+(drive an agent through a fixed sequence, persist state, survive restarts) — real evidence a
+Harness-equivalent *can* be expressed as a Pi extension rather than a separate Python process, if
+exhaust ever wanted to run entirely inside Pi. The cost is the same language boundary already
+named in §7, now concrete at the orchestration layer too: the ledger, scope checks, and approval
+logic would all end up as TypeScript workflow-state code, not exhaust's own Python domain modules.
+
+**`garnetlyx/pi-goal-kit`** (5 stars, MIT) implements a real five-phase state machine
+(`idle → select-reviewer → plan → act → review → verify → exit`) with an adversarial review phase
+gating "done" — richer than exhaust's own ledger states in that one respect. But its own README
+admits the same weakness Percho's audit entry already surfaced: "the reviewer's tool whitelist
+includes `bash`, which is not sandboxed. Withholding write/edit tools plus an explicit instruction
+is a strong default, not an enforced boundary." A third independent confirmation that a raw shell
+tool defeats text-pattern/instruction-based restriction, the exact risk ADR 0018's enumerated
+bridge exists to avoid.
+
+**`tintinweb/pi-tasks`** (236 stars, MIT) is a Claude-Code-style task tracker — and its task
+status transitions are **purely agent-self-reported with no host-side verification**: `TaskUpdate`
+writes whatever status the model calls it with, with no oracle-style check that a task marked
+`completed` actually produced anything. A fourth, unrelated confirmation of the gap
+[ADR 0008](../adr/0008-confirmed-requires-a-host-run-oracle.md) already names as "the one gap found,
+in some form, in nearly every comparable tool audited so far." Its own stated design choice —
+"there is deliberately no executable config file, so nothing in a cloned repository's `.pi/` can
+run on your machine" — is a small, sound security pattern (config as data, never code) worth
+noting in passing.
+
+**`tintinweb/pi-schedule-prompt`** (121 stars, MIT) surfaces the single most concrete new risk in
+this batch: **a real, default-open gate-bypass path, confirmed in source.** A scheduled job that
+sets `model` spawns a fresh, separate `AgentSession` via `src/subagent.ts`, whose own doc comment
+states plainly: "spawn a fresh AgentSession with the chosen model, run the prompt to completion,
+return the assistant's text. No subprocess, no extension recursion (`noExtensions: true`), no
+persistence." Extensions — including any `tool_call` gate extension — are **not loaded by default**
+in that spawned session; the README documents `extensions: boolean | string[]` as an explicit
+opt-in an operator must set, defaulting to none. This means a background or scheduled subagent
+session, by default, runs with zero gates unless whoever configured that job explicitly re-enables
+extensions for it. Sharper and more concrete than the RPC-mode question in §4: a real path where
+the gate genuinely is bypassed by default, not merely a theoretical one. Directly actionable for
+any exhaust-on-Pi design: every `createAgentSession()` call site — main session and any
+subagent/background session spawned by any extension — needs its own explicit gate-loading check,
+since Pi does not propagate it automatically.
+
+**`arpagon/pi-rewind`** (116 stars, MIT) checkpoints via git commits under a dedicated ref
+namespace, entirely separate from Pi's own session JSONL-tree/fork/clone mechanism (§1) — "a
+two-layer split: `core.ts` is pure git operations with zero Pi dependency." One checkpoint per
+turn, offering `/rewind` to roll back after the fact. Useful as a contrast, not a convergent
+finding: this is a reactive, filesystem-only undo mechanism with no answer to (and no way to
+extend to) a crash mid-`RealTargetCall` — you cannot git-rewind a real network scan or an
+already-sent exploit attempt the way you can a local file edit. It confirms, by contrast, that
+[ADR 0015](../adr/0015-crash-mid-real-target-action-blocks-not-retries.md)'s "block and surface
+state explicitly, never silently roll back or retry" stance addresses a problem class the Pi
+community's own tooling has no answer for, because that tooling is scoped to local-filesystem
+coding work where "undo" is coherent.
+
+## 8. Credential isolation: two real, opposite answers already built
+
+Two of the linked repos tackle the exact question [ADR 0021](../adr/0021-agent-never-holds-the-real-llm-credential.md)
+settled for exhaust — never let the agent process hold the real, usable LLM credential — and land
+on opposite answers, both pushed the same day.
+
+**`joaomj/pi-claude-directsdk`** (36 stars, MIT) gets this right, in ADR 0021's own spirit, by a
+different mechanism than a virtual-key proxy. It spawns a **request-scoped `claude` child process
+per model call**, replays Pi's transcript into it via stdin (`stream-json`, `--max-turns 1`,
+`--permission-mode dontAsk`, `--no-session-persistence`), and routes the CLI's outbound
+`POST /v1/messages` through a local loopback "admission relay" that forwards only the first
+upstream request and locally denies any retry the CLI attempts on its own. Quoted from its own
+architecture doc: "Pi owns the transcript, tools, approvals, and retries. The CLI supplies
+subscription authentication as a model transport... The provider never manages login or reads
+credentials." The real credential never enters the Pi/extension process at all — it stays inside
+the official `claude` binary's own auth storage, which this extension never touches.
+
+**`leohenon/pi-anthropic-oauth`** (109 stars, MIT) does the opposite: it performs its own direct
+OAuth client registration against Anthropic's endpoints using the well-known public Claude Code
+client ID, then talks to the real Messages API directly with the resulting bearer token — the raw
+OAuth credential lives inside the Pi extension process itself, exactly the anti-pattern ADR 0021
+forbids. It also actively impersonates the Claude Code client to keep OAuth working: "prepends the
+Claude Code billing-header and identity system blocks and rewrites standalone `Pi`/`pi` references
+in Pi's system prompt to `Claude Code`," with its own README warning "disabling or weakening the
+rewrite may affect OAuth compatibility." Its README quotes a live, dated enforcement signal worth
+noting directly: the actual Anthropic API error this extension exists to route around, `400
+invalid_request_error`: "Third-party apps now draw from your extra usage, not your plan limits" —
+confirmation Anthropic has already begun enforcing a distinction between a user's own CLI usage and
+third-party-app usage of the same subscription, a live fact rather than a policy-page inference.
+
+**Updates the earlier subscription-auth caveat, doesn't resolve it.** `pi-claude-directsdk`'s own
+`docs/comparison.md` cites a more specific, more recent primary source than the earlier
+agent-backend-abstraction research reached: Anthropic's subscription-guidance support article
+(`support.claude.com/en/articles/15036540`), which states Agent SDK, `claude -p`, and third-party
+app usage "can still draw from subscription limits" — read by this repo's own author as leaving
+the question open rather than settling it either way, quoted directly: "these statements address
+different conditions; neither establishes project-specific approval." That is the repo author's
+own hedge, not a verified legal conclusion, but it is a materially more specific and more recent
+source than what the earlier pass found, and worth checking directly before treating ADR 0021's
+"unresolved, don't build toward subscription auth" stance as fully settled.
+
+## 9. Two more real-world data points: branch-scoped gate state, and a richer extension lifecycle
+
+**`huang-sh/PiX`** (215 stars, MPL-2.0) is a non-linear workbench built directly on Pi's documented
+session-tree model, confirming it works for a real third-party UI: "Sessions are real Pi sessions
+— no new format — so they remain usable outside PiX." It also answers a question the core audit
+hadn't asked: does `tool_call`-hook state (e.g. an "always allow this tool" memory) carry across a
+session fork? No — quoted from its own docs: "each branch has its own independent Pi runtime,
+SessionManager and services." Gating state is runtime-scoped like everything else about a branch,
+and branch content never merges back into the main session automatically, by design. Relevant if
+exhaust ever used Pi's branching for parallel investigation of a vertical: any approval state the
+gate accumulates would need its own explicit propagation, since Pi won't do it.
+
+**`green-dalii/pi-shift-router`** (13 stars, MIT, heavily SEO-marketed README treated as
+promotional, not factual, text) confirms Pi's extension lifecycle is considerably richer than
+"gate plus custom tools": source confirms `pi.on(...)` registrations across `model_select`,
+`session_start`, `before_agent_start`, `tool_call`, `tool_result`, `agent_end`, `agent_settled`,
+`turn_end`, `after_provider_response`, `message_start`, and `message_end`. Its actual per-turn
+model-routing mechanism hooks `before_agent_start` and calls `pi.setModel(model)` — a documented,
+public mutation point, not a `ModelRuntime`-layer hack. Not directly relevant to the gate question,
+but worth knowing the full hook surface exists, since a future exhaust-on-Pi design might want more
+than just `tool_call` (e.g. `session_start` for Workspace setup, `agent_end` for ledger bookkeeping).
+
+## 10. What this means for exhaust's shape, concretely
 
 Compared against `AgentAction`'s closed union (`SandboxCall`, `RealTargetCall`, `RecordFinding`,
 `ProposeVerdict`, `SelfReport`, `SetVerticalState`) and the synchronous-gate requirement the
@@ -260,78 +435,117 @@ earlier survey used to judge every backend:
   gate, not a gate itself — exhaust would still write the actual `AgentAction` validation,
   the Scope Contract re-check for `RealTargetCall`, and the [ADR 0023](../adr/0023-consequential-real-target-actions-wait-for-a-human.md)
   pending-approval logic inside the handler, exactly as it would inside `canUseTool`.
-- **The real new cost is the language boundary.** Pi is TypeScript end to end — the embedded SDK,
-  the extension API, the RPC subprocess's internals. exhaust's Harness is Python. Every other
-  backend surveyed so far (Claude Agent SDK, Cursor SDK, Codex) either ships a Python SDK or is
-  driven as a subprocess with a wire protocol exhaust's own Python process fully owns. Pi's RPC
-  mode gets exhaust most of the way there (a Python process can drive the subprocess over
-  stdin/stdout JSON without writing TypeScript), but the gate itself — the `tool_call` extension
-  — has to be a loaded TypeScript module running inside the Pi process, not something exhaust's
-  Python harness can author directly. The `extension_ui_request`/`response` bridge narrows this
-  to "write one small, auditable TypeScript shim that forwards every decision to Python," not
-  "port the harness to TypeScript," but it is a real integration cost none of the Python-native
-  or wire-protocol-first options carry.
+- **The real new cost is the language boundary — but it's a confirmed-working one, not a
+  guess.** Pi is TypeScript end to end — the embedded SDK, the extension API, the RPC subprocess's
+  internals. exhaust's Harness is Python. Every other backend surveyed so far (Claude Agent SDK,
+  Cursor SDK, Codex) either ships a Python SDK or is driven as a subprocess with a wire protocol
+  exhaust's own Python process fully owns. `imrj05/orbit` (§7) proves the bridge pattern actually
+  works in production: a pure Rust client with zero Node/JS anywhere in its own code still achieves
+  gating by bundling a thin TypeScript extension that defers every decision over RPC to the
+  external process. The same shape would work for a Python harness. It is a real integration cost
+  (one small, auditable TypeScript shim to write and trust) — now a de-risked one, not speculative.
+- **A second, concrete cost: the gate is not inherited by default.** `tintinweb/pi-schedule-prompt`
+  (§7) shows a scheduled subagent session spawned with a `model` override loads **zero extensions**
+  by default (`noExtensions: true`), meaning zero gates, unless the operator explicitly re-enables
+  them for that session. Any exhaust-on-Pi design would need to treat "is the gate extension loaded"
+  as a per-`createAgentSession()`-call-site check, never an inherited property — a concrete
+  implementation discipline, not a disqualifier, but a real way to get this quietly wrong.
+- **A third cost, independent of the gate question: real, acknowledged public-SDK gaps.** Two
+  separate serious integrators (JetBrains' `pi-compatibility.md`, Percho's shipped source patches,
+  §6) are actively patching or mirroring around missing public API surface in Pi's current SDK —
+  an ongoing maintenance burden anyone embedding Pi inherits, distinct from the one-time cost of
+  writing the gate extension itself.
 - **Credential isolation ([ADR 0021](../adr/0021-agent-never-holds-the-real-llm-credential.md))
-  is unresolved in this pass**, same gap as every other backend surveyed except LiteLLM
-  specifically: Pi's `ModelRuntime` abstraction would be the thing making the actual provider
-  call, so a virtual-key proxy would sit between Pi and the real provider via whatever base-URL/
-  API-key configuration each of its 15+ provider adapters accepts — not verified in this pass,
-  and provider-adapter-specific, so it would need its own check before relying on it.
-- **Pricing/business model is unverified.** Not reached in this pass. Before treating Pi as a
-  real candidate, confirm whether `pi.dev` is purely the open-source CLI/SDK (consistent with
-  the MIT-licensed GitHub repo found) or whether there's a hosted/paid tier with its own terms
+  now has two sharply contrasting real-world answers** (§8): `pi-claude-directsdk` gets it right —
+  the agent process never touches the real credential, which stays inside an opaque `claude`
+  subprocess — while `pi-anthropic-oauth` does the opposite, holding a raw OAuth bearer token
+  in-process. Neither resolves how a virtual-key proxy would front Pi's own 15-provider
+  `ModelRuntime` for providers other than Claude, which remains unverified, but the credential
+  question is no longer purely theoretical for Pi specifically.
+- **Pricing/business model is still unverified.** Not reached in any pass so far. Before treating
+  Pi as a real candidate, confirm whether `pi.dev` is purely the open-source CLI/SDK (consistent
+  with the MIT-licensed GitHub repo found) or whether there's a hosted/paid tier with its own terms
   that would matter the way the Claude Agent SDK's subscription-billing ambiguity did in the
   earlier survey.
 
 ## Verdict
 
-**Pi is a live contender, not a dead one — and the strongest-evidenced one surveyed so far.** The
-earlier survey's disqualifying claim — no synchronous per-call gate in either mode — is wrong,
-confirmed not just by Pi's own docs, worked example, and dispatch source, but by three
-independent production codebases (a line-cited third-party book reading the raw agent-loop
-source, a JetBrains-incubated IDE, and a popular third-party desktop GUI) all converging on the
-same `beforeToolCall`/`tool_call` mechanism as their actual security boundary, two of them
-shipping it in front of real users today. Pi's gate is structurally close to Claude Agent SDK's
-`canUseTool`: it fires before execution, can block with a reason, fails closed on a throwing
-handler at two separate layers, and (via `customTools`) hands the handler a clean `toolName`/
-`input` pair per call, batched per-turn so a multi-action turn clears the gate as a whole before
-any of it dispatches.
+**Pi is a live contender, not a dead one — and by a wide margin the most thoroughly evidenced one
+surveyed so far.** The earlier survey's disqualifying claim — no synchronous per-call gate in
+either mode — is wrong, now confirmed not just by Pi's own docs, worked example, and dispatch
+source, but by **six** independent, unrelated third-party production codebases converging on the
+same `beforeToolCall`/`tool_call` mechanism as their actual security boundary: a line-cited
+third-party book reading the raw agent-loop source (`pi-book`), a JetBrains-incubated IDE
+(`thinkrail`), a popular third-party desktop GUI (`percho`), a Pi-ecosystem extension library's own
+enforcement tooling (`pi-extension-tools`), an independently-reinvented near-copy of ADR 0023's own
+approval design (`pi-extension-small-modal-reliability`), and a pure-Rust client proving the gate
+survives a non-JS language boundary in production (`orbit`). Four of these ship the gate in front
+of real users today, not just in a docs example. Pi's gate is structurally close to Claude Agent SDK's `canUseTool`: it
+fires before execution, can block with a reason, fails closed on a throwing handler at two
+separate layers, hands the handler a clean `toolName`/`input` pair per call, and batches per-turn
+so a multi-action turn clears the gate as a whole before any of it dispatches.
 
-What makes Pi different from the Python-native options is two separable costs, not one. First,
-the language boundary: the gate itself must live in a loaded TypeScript extension, with RPC
-mode's UI-request channel as the bridge back to exhaust's own Python process for the actual
-decision — a real, specific integration cost (one small TypeScript shim to write and keep
-auditable), not a blocker. Second, and new in this pass: **Pi's current public SDK surface has
-real, acknowledged gaps that two independent serious integrators are actively patching or
-mirroring around** (JetBrains' formally tracked `pi-compatibility.md`, Percho's shipped source
-patches against its pinned SDK version) — an ongoing maintenance cost of embedding Pi that would
-apply to exhaust too, separate from the one-time cost of writing the gate itself. A third,
-structural hazard also surfaced: a documented deadlock in Pi's own harness docs if a hook awaits
-the current run's own settlement — a constraint any exhaust gate implementation must respect by
-design, not something to discover at run time.
+What makes Pi different from the Python-native options is three separable, now-concrete costs,
+not an abstract one. First, the language boundary: the gate itself must live in a loaded
+TypeScript extension, with RPC mode's UI-request channel as the bridge back to exhaust's own
+Python process — a real cost, but **de-risked, not speculative**: `imrj05/orbit` ships exactly
+this bridge pattern in production from a pure-Rust client. Second: the gate is **not inherited by
+default** — `tintinweb/pi-schedule-prompt` shows a model-overridden subagent session spawns with
+zero extensions loaded unless an operator explicitly re-enables them, a real default-open bypass
+path any exhaust-on-Pi design must check at every session-creation site, not assume. Third: **Pi's
+current public SDK surface has real, acknowledged gaps** that two independent serious integrators
+are actively patching or mirroring around (JetBrains' formally tracked `pi-compatibility.md`,
+Percho's shipped source patches) — an ongoing maintenance cost distinct from the one-time cost of
+writing the gate extension. A structural hazard also surfaced and must be designed around from the
+start: a documented deadlock in Pi's own harness docs if a hook awaits the current run's own
+settlement.
 
-Open questions before going further: whether exhaust is comfortable with any TypeScript in the
-trust boundary at all (even a thin, reviewable shim); how ADR-0021's credential proxy would sit in
-front of a 15-provider `ModelRuntime`; what pi.dev's actual pricing/hosting model is; and whether
-the ongoing patch/mirror burden two existing integrators already carry is an acceptable maintenance
-cost for exhaust to take on as well.
+Credential isolation (ADR 0021) is no longer a purely theoretical gap for Pi specifically: one
+linked repo (`pi-claude-directsdk`) gets it right by routing through an opaque `claude` subprocess
+the agent process never touches; another (`pi-anthropic-oauth`) does the opposite, holding a raw
+OAuth token in-process — real evidence both the right and wrong answers already exist in Pi's own
+ecosystem, though neither settles how a proxy would front Pi's 15-provider `ModelRuntime` for
+non-Claude providers. Open questions before going further: whether exhaust is comfortable with any
+TypeScript in the trust boundary at all (even a thin, reviewable, now-precedented shim); how
+ADR-0021's credential proxy would sit in front of a 15-provider `ModelRuntime`; what pi.dev's
+actual pricing/hosting model is; and whether the ongoing patch/mirror burden two existing
+integrators already carry is an acceptable maintenance cost for exhaust to take on as well.
 
 ## What this settled for exhaust
 
 - Corrects [`2026-10-27-agent-backend-abstraction-research.md`](2026-10-27-agent-backend-abstraction-research.md) §2:
   Pi has a real synchronous per-call gate (`pi.on("tool_call", ...)`/`beforeToolCall`), not none.
   Pi moves from "no veto point" to the same tier as Claude Agent SDK's `canUseTool`, now backed by
-  three independent production adopters (`antinomie-lab/pi-book`, `JetBrains/thinkrail`,
-  `Jaxton07/percho`) confirming the mechanism holds up in real deployments, not just in docs.
-  Not a recommendation to adopt it — the backend choice remains open and is the user's call —
-  but it is no longer fair to rule Pi out on the "no approval hook" basis the earlier pass used.
+  six independent production adopters (`antinomie-lab/pi-book`, `JetBrains/thinkrail`,
+  `Jaxton07/percho`, `pi-extension-tools`, `pi-extension-small-modal-reliability`, `imrj05/orbit`)
+  confirming the mechanism holds up in real deployments, not just in docs. Not a recommendation to
+  adopt it — the backend choice remains open and is the user's call — but it is no longer fair to
+  rule Pi out on the "no approval hook" basis the earlier pass used.
+- **`imrj05/orbit` de-risks the RPC-bridge integration pattern specifically**: what the first Pi
+  pass flagged as its own unverified synthesis (a thin TypeScript gate extension deferring to an
+  external, non-JS process over RPC) is now a confirmed, shipping pattern from a pure-Rust client.
+  The language-boundary cost is real but no longer speculative.
+- **`tintinweb/pi-schedule-prompt` names a concrete, previously-unknown risk**: a model-overridden
+  subagent session loads zero extensions by default (`noExtensions: true`), meaning zero gates,
+  unless an operator explicitly re-enables them. Any exhaust-on-Pi design needs an explicit
+  gate-loaded check at every session-creation site, since Pi does not propagate it automatically.
+- **`pi-extension-small-modal-reliability` independently reinvented something very close to ADR
+  0023's own design** (hash-keyed approvals, host-normalized matching, re-propose-after-approval,
+  never execute on approval alone) — convergent validation from an author with no connection to
+  exhaust, not just an internally-consistent design.
 - **A new, named cost beyond the TypeScript boundary**: real public-SDK gaps that existing
-  integrators formally track (thinkrail) or source-patch around (Percho) — an ongoing maintenance
-  burden, not a one-time integration cost, worth weighing against the Python-native options'
-  comparative maturity.
+  integrators formally track (thinkrail's `pi-compatibility.md`) or source-patch around (Percho's
+  shipped patches) — an ongoing maintenance burden, not a one-time integration cost, worth weighing
+  against the Python-native options' comparative maturity.
+- **Credential isolation (ADR 0021) now has two contrasting real-world examples specific to Pi**:
+  `pi-claude-directsdk` never lets the agent process touch the real credential (an opaque `claude`
+  subprocess holds it); `pi-anthropic-oauth` does the opposite, holding a raw OAuth token in-process
+  and spoofing client identity to keep it working. Neither resolves how a proxy would front Pi's
+  15-provider `ModelRuntime` for non-Claude providers.
 - **A real counterexample worth noting against [ADR 0023](../adr/0023-consequential-real-target-actions-wait-for-a-human.md)'s
-  "no bypass flag" stance**: Percho ships an audited `fullAccess` bypass mode. Not a reason to
-  reconsider ADR 0023 — logged-but-allowed is a materially weaker guarantee than pre-approval-only
-  — but evidence a popular Pi-based tool made the opposite call exhaust explicitly rejected.
+  "no bypass flag" stance**: both Percho and `imrj05/orbit` ship an audited `fullAccess`/"Full
+  access" bypass mode. Not a reason to reconsider ADR 0023 — logged-but-allowed is a materially
+  weaker guarantee than pre-approval-only — but evidence that two separate popular Pi-based tools
+  independently made the opposite call exhaust explicitly rejected.
   Still open before any decision: pi.dev's pricing/hosting model, and how ADR-0021's credential
   proxy would front a 15-provider `ModelRuntime`.
