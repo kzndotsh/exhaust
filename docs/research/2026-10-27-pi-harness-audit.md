@@ -421,7 +421,57 @@ public mutation point, not a `ModelRuntime`-layer hack. Not directly relevant to
 but worth knowing the full hook surface exists, since a future exhaust-on-Pi design might want more
 than just `tool_call` (e.g. `session_start` for Workspace setup, `agent_end` for ledger bookkeeping).
 
-## 10. What this means for exhaust's shape, concretely
+## 10. Closing the three open questions: pricing, redistribution, and the credential proxy
+
+Three things had stayed unverified across every pass so far, and a dedicated follow-up closed two
+of them and narrowed the third.
+
+**Pricing/hosting/telemetry — resolved cleanly.** Pi core (the CLI/SDK at `pi.dev`,
+`@earendil-works/pi-coding-agent`) has no pricing, no paid tier, no account requirement, and no
+documented telemetry. Fetched directly, `pi.dev`'s footer credits "Earendil Inc. & Contributors,"
+and no `/pricing` page is linked anywhere in the nav. `security.md` says nothing about phoning home
+or analytics — its only related text is a recommendation to review sessions before sharing them,
+which is about user-initiated export/share, not automatic collection. There is a separate,
+optional commercial product from the same company, **Radius** (`radius.earendil.com`, an AI
+gateway with org controls/analytics, reachable via `/login radius`), explicitly early-alpha, whose
+own terms of service (fetched directly) restrict it to "development, testing and evaluation,"
+excluding "production workloads," with no redistribution right granted. This matters only if
+exhaust specifically adopted Radius — Pi's core provider configuration (below) doesn't require it,
+and exhaust has no reason to reach for it.
+
+**Terms of service for embedding Pi in a redistributed tool — resolved cleanly.** The actual
+`LICENSE` file (read in full from a fresh clone, not inferred from `gh api`'s metadata) is plain,
+unmodified MIT text: `Copyright (c) 2025 Mario Zechner`, no additional clauses, no field-of-use
+restriction, no anti-redistribution language. (This also confirms §7's housekeeping note: Mario
+Zechner is `badlogic`, explaining the `badlogic/pi-mono` → `earendil-works/pi` rename trail.) No
+separate ToS/EULA exists for core Pi itself — the only ToS found anywhere on `pi.dev` is Radius's,
+which core usage never invokes. There is nothing in Pi's license that would restrict exhaust, an
+open-source tool other people install and run, from embedding it — a materially different
+situation from the Claude Agent SDK's genuinely unresolved subscription-auth policy question (§8,
+and the earlier agent-backend-abstraction research).
+
+**Credential-proxy uniformity across providers — narrowed from a blanket unknown to one specific,
+named gap.** `models.md`, fetched directly, documents a generalized mechanism: "To route a
+built-in provider through a proxy, set only its `baseUrl`," with a literal worked example naming
+Anthropic specifically: `"anthropic": { "baseUrl": "https://proxy.example.com/v1" }`. This directly
+supports [ADR 0021](../adr/0021-agent-never-holds-the-real-llm-credential.md)'s shape: a
+budget-capped virtual-key proxy could front Pi's Anthropic calls today via this one field, with the
+proxy speaking Anthropic's native wire format. It is not perfectly uniform in mechanics, though:
+`providers.md` confirms OpenRouter and Azure also take a `baseUrl` in `models.json`, but Azure's
+dedicated env vars override it when set, key-variable names are provider-specific, and Cloudflare
+needs extra account/gateway IDs — all still API-key-shaped and solvable the same way. The real,
+named gap: **Bedrock and Vertex use ambient cloud credentials, not an API key at all** — a proxy
+fronting those two specifically would need to intercept the cloud SDK's own credential chain, not
+an HTTP base-URL swap. Solved for the provider exhaust would actually start with (Anthropic,
+confirmed with a literal example), solvable the same way for most API-key providers, unresolved
+only for Bedrock/Vertex specifically if exhaust ever wanted those.
+
+**Net effect**: two of the three concerns raised when weighing whether to recommend Pi are no
+longer open questions, and the third is now a narrow, named gap (two cloud-native providers) rather
+than a blanket unknown across all 15+. This softens, without fully resolving, the hesitation this
+audit raised about recommending Pi outright — see the updated Verdict below.
+
+## 11. What this means for exhaust's shape, concretely
 
 Compared against `AgentAction`'s closed union (`SandboxCall`, `RealTargetCall`, `RecordFinding`,
 `ProposeVerdict`, `SelfReport`, `SetVerticalState`) and the synchronous-gate requirement the
@@ -459,14 +509,17 @@ earlier survey used to judge every backend:
   now has two sharply contrasting real-world answers** (§8): `pi-claude-directsdk` gets it right —
   the agent process never touches the real credential, which stays inside an opaque `claude`
   subprocess — while `pi-anthropic-oauth` does the opposite, holding a raw OAuth bearer token
-  in-process. Neither resolves how a virtual-key proxy would front Pi's own 15-provider
-  `ModelRuntime` for providers other than Claude, which remains unverified, but the credential
-  question is no longer purely theoretical for Pi specifically.
-- **Pricing/business model is still unverified.** Not reached in any pass so far. Before treating
-  Pi as a real candidate, confirm whether `pi.dev` is purely the open-source CLI/SDK (consistent
-  with the MIT-licensed GitHub repo found) or whether there's a hosted/paid tier with its own terms
-  that would matter the way the Claude Agent SDK's subscription-billing ambiguity did in the
-  earlier survey.
+  in-process. A proxy fronting Pi's own `ModelRuntime` is now confirmed solvable for Anthropic and
+  most API-key providers via a single documented `baseUrl` field (§10) — the gap narrows to Bedrock
+  and Vertex specifically, which use ambient cloud credentials rather than an API key.
+- **Pricing/hosting/telemetry is resolved, not unverified.** Core Pi (the CLI/SDK) has no cost, no
+  account requirement, and no documented telemetry (§10). A separate, optional commercial product
+  from the same company, Radius, exists and is explicitly alpha-only/non-production in its own
+  terms — irrelevant unless exhaust specifically chose to adopt it, which nothing about Pi's core
+  provider configuration requires.
+- **Redistribution is resolved, not unverified.** The actual `LICENSE` file is plain, unmodified
+  MIT with no field-of-use restriction (§10) — a materially different, and better, situation than
+  the Claude Agent SDK's genuinely unresolved subscription-auth policy question.
 
 ## Verdict
 
@@ -504,12 +557,21 @@ Credential isolation (ADR 0021) is no longer a purely theoretical gap for Pi spe
 linked repo (`pi-claude-directsdk`) gets it right by routing through an opaque `claude` subprocess
 the agent process never touches; another (`pi-anthropic-oauth`) does the opposite, holding a raw
 OAuth token in-process — real evidence both the right and wrong answers already exist in Pi's own
-ecosystem, though neither settles how a proxy would front Pi's 15-provider `ModelRuntime` for
-non-Claude providers. Open questions before going further: whether exhaust is comfortable with any
-TypeScript in the trust boundary at all (even a thin, reviewable, now-precedented shim); how
-ADR-0021's credential proxy would sit in front of a 15-provider `ModelRuntime`; what pi.dev's
-actual pricing/hosting model is; and whether the ongoing patch/mirror burden two existing
-integrators already carry is an acceptable maintenance cost for exhaust to take on as well.
+ecosystem. A follow-up pass (§10) then closed the three biggest remaining unknowns, two of them
+fully: **pricing/hosting is resolved** (core Pi has no cost, no account, no telemetry; a separate
+alpha-only commercial product, Radius, is irrelevant unless specifically adopted, which nothing
+requires); **redistribution is resolved** (plain, unmodified MIT, verified from the actual LICENSE
+text, no field-of-use restriction — a materially better position than the Claude Agent SDK's
+genuinely unresolved subscription-ToS question); and **the credential-proxy question narrows from a
+blanket unknown to one named gap** — a documented, single-field `baseUrl` proxy mechanism works
+today for Anthropic (confirmed with a literal example) and most API-key providers, leaving only
+Bedrock and Vertex's ambient-cloud-credential model unresolved, not all 15+ providers.
+
+What's left, genuinely open, after all four passes: whether exhaust is comfortable with any
+TypeScript in the trust boundary at all (even a thin, reviewable, now-precedented shim); whether
+the ongoing patch/mirror burden two existing integrators already carry (§6) is an acceptable
+maintenance cost to take on; and Bedrock/Vertex specifically, if exhaust ever wanted those two
+providers. Everything else that looked open two passes ago is now settled, in Pi's favor.
 
 ## What this settled for exhaust
 
@@ -540,12 +602,18 @@ integrators already carry is an acceptable maintenance cost for exhaust to take 
 - **Credential isolation (ADR 0021) now has two contrasting real-world examples specific to Pi**:
   `pi-claude-directsdk` never lets the agent process touch the real credential (an opaque `claude`
   subprocess holds it); `pi-anthropic-oauth` does the opposite, holding a raw OAuth token in-process
-  and spoofing client identity to keep it working. Neither resolves how a proxy would front Pi's
-  15-provider `ModelRuntime` for non-Claude providers.
+  and spoofing client identity to keep it working. A follow-up pass confirms a proxy fronting Pi's
+  `ModelRuntime` is solvable today for Anthropic (a documented, literal `baseUrl` example) and most
+  API-key providers; the only named remaining gap is Bedrock/Vertex's ambient-cloud-credential model.
 - **A real counterexample worth noting against [ADR 0023](../adr/0023-consequential-real-target-actions-wait-for-a-human.md)'s
   "no bypass flag" stance**: both Percho and `imrj05/orbit` ship an audited `fullAccess`/"Full
   access" bypass mode. Not a reason to reconsider ADR 0023 — logged-but-allowed is a materially
   weaker guarantee than pre-approval-only — but evidence that two separate popular Pi-based tools
   independently made the opposite call exhaust explicitly rejected.
-  Still open before any decision: pi.dev's pricing/hosting model, and how ADR-0021's credential
-  proxy would front a 15-provider `ModelRuntime`.
+- **Pricing/hosting and redistribution are both resolved, not open.** Core Pi has no cost, account
+  requirement, or documented telemetry; its `LICENSE` is plain, unmodified MIT with no
+  field-of-use restriction, verified from the actual file text. A separate alpha-only commercial
+  product from the same company (Radius) exists but is irrelevant to this decision.
+  Genuinely still open: whether exhaust is comfortable with any TypeScript in the trust boundary at
+  all, the ongoing patch/mirror maintenance burden two existing integrators already carry, and
+  Bedrock/Vertex specifically if exhaust ever wanted those two providers.
