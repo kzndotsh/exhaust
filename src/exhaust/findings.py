@@ -127,6 +127,30 @@ class Finding:
     evidence: str
 
 
+def _finding_to_dict(finding: Finding) -> dict[str, Any]:
+    return {
+        "id": finding.id,
+        "target": finding.target,
+        "vertical": finding.vertical,
+        "claim": finding.claim,
+        "severity": finding.severity,
+        "scope": finding.scope.value,
+        "evidence": finding.evidence,
+    }
+
+
+def _finding_from_dict(data: dict[str, Any]) -> Finding:
+    return Finding(
+        id=data["id"],
+        target=data["target"],
+        vertical=data["vertical"],
+        claim=data["claim"],
+        severity=data["severity"],
+        scope=FindingScope(data["scope"]),
+        evidence=data["evidence"],
+    )
+
+
 def new_finding(
     target: str,
     vertical: str,
@@ -208,6 +232,26 @@ class Verdict:
             )
 
 
+def _verdict_to_dict(verdict: Verdict) -> dict[str, Any]:
+    return {
+        "type": verdict.type.value,
+        "note": verdict.note,
+        "requirements": verdict.requirements,
+        "supporting_evidence": list(verdict.supporting_evidence),
+        "contradicting_evidence": list(verdict.contradicting_evidence),
+    }
+
+
+def _verdict_from_dict(data: dict[str, Any]) -> Verdict:
+    return Verdict(
+        type=VerdictType(data["type"]),
+        note=data.get("note", ""),
+        requirements=data.get("requirements"),
+        supporting_evidence=tuple(data.get("supporting_evidence", ())),
+        contradicting_evidence=tuple(data.get("contradicting_evidence", ())),
+    )
+
+
 @dataclass(frozen=True)
 class VerdictEntry:
     """A Verdict plus who recorded it and what Oracle result backs it.
@@ -286,24 +330,20 @@ def _append_event(workspace_dir: Path, event: dict[str, Any]) -> None:
 
 def _verdict_entry_from_event(event: dict[str, Any]) -> VerdictEntry:
     return VerdictEntry(
-        verdict=Verdict(
-            type=VerdictType(event["type"]),
-            note=event.get("note", ""),
-            requirements=event.get("requirements"),
-            supporting_evidence=tuple(event.get("supporting_evidence", ())),
-            contradicting_evidence=tuple(event.get("contradicting_evidence", ())),
-        ),
+        verdict=_verdict_from_dict(event),
         recorded_by=RecordedBy(event["recorded_by"]),
         oracle_result=oracle_result_from_dict(event.get("oracle_result")),
     )
 
 
 def _latest_entry_for(events: list[dict[str, Any]], finding_id: str) -> VerdictEntry | None:
-    latest: VerdictEntry | None = None
-    for event in events:
+    # Scans the raw dicts in reverse and builds at most one VerdictEntry,
+    # rather than reconstructing every verdict event for this finding just
+    # to keep the last one.
+    for event in reversed(events):
         if event["kind"] == "verdict" and event["finding_id"] == finding_id:
-            latest = _verdict_entry_from_event(event)
-    return latest
+            return _verdict_entry_from_event(event)
+    return None
 
 
 def record_finding(workspace_dir: Path, finding: Finding) -> None:
@@ -326,19 +366,7 @@ def record_finding(workspace_dir: Path, finding: Finding) -> None:
     events = _read_events(workspace_dir)
     if any(e["kind"] == "finding" and e["id"] == finding.id for e in events):
         raise FindingAlreadyExistsError(finding.id)
-    _append_event(
-        workspace_dir,
-        {
-            "kind": "finding",
-            "id": finding.id,
-            "target": finding.target,
-            "vertical": finding.vertical,
-            "claim": finding.claim,
-            "severity": finding.severity,
-            "scope": finding.scope.value,
-            "evidence": finding.evidence,
-        },
-    )
+    _append_event(workspace_dir, {"kind": "finding", **_finding_to_dict(finding)})
 
 
 def record_verdict(
@@ -417,11 +445,7 @@ def record_verdict(
         {
             "kind": "verdict",
             "finding_id": finding_id,
-            "type": verdict.type.value,
-            "note": verdict.note,
-            "requirements": verdict.requirements,
-            "supporting_evidence": list(verdict.supporting_evidence),
-            "contradicting_evidence": list(verdict.contradicting_evidence),
+            **_verdict_to_dict(verdict),
             "recorded_by": recorded_by.value,
             "oracle_result": oracle_result_to_dict(persisted_oracle_result),
         },
@@ -449,15 +473,7 @@ def load_findings(workspace_dir: Path) -> list[FindingRecord]:
 
     for event in events:
         if event["kind"] == "finding":
-            finding = Finding(
-                id=event["id"],
-                target=event["target"],
-                vertical=event["vertical"],
-                claim=event["claim"],
-                severity=event["severity"],
-                scope=FindingScope(event["scope"]),
-                evidence=event["evidence"],
-            )
+            finding = _finding_from_dict(event)
             findings[finding.id] = finding
             histories[finding.id] = []
             order.append(finding.id)
