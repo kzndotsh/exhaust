@@ -7,6 +7,7 @@
 <a href="https://github.com/kzndotsh/exhaust/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kzndotsh/exhaust/ci.yml?branch=main&label=CI&logo=github&style=for-the-badge"></a>
 <a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white&style=for-the-badge"></a>
 <a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/uv-managed-DE5FE9?logo=uv&logoColor=white&style=for-the-badge"></a>
+<a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-lightgrey?style=for-the-badge"></a>
 
 </div>
 
