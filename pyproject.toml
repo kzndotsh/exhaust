@@ -122,6 +122,7 @@ modules = [
     "exhaust.delimiter",
     "exhaust.evidence",
     "exhaust.rig",
+    "exhaust.attempts",
 ]
 
 [[tool.importlinter.contracts]]
@@ -136,6 +137,7 @@ modules = [
     "exhaust.delimiter",
     "exhaust.evidence",
     "exhaust.rig",
+    "exhaust.attempts",
 ]
 
 [[tool.importlinter.contracts]]
@@ -161,6 +163,7 @@ source_modules = [
     "exhaust.delimiter",
     "exhaust.evidence",
     "exhaust.rig",
+    "exhaust.attempts",
 ]
 forbidden_modules = [
     "exhaust.harness",
@@ -179,6 +182,7 @@ source_modules = [
     "exhaust.delimiter",
     "exhaust.evidence",
     "exhaust.rig",
+    "exhaust.attempts",
     "exhaust.harness",
 ]
 forbidden_modules = [
