@@ -26,7 +26,7 @@ from exhaust.approvals import is_approved as approval_is_approved
 from exhaust.approvals import request_approval as approval_request
 from exhaust.approvals import resolve as approval_resolve
 from exhaust.attempts import record_attempt, tools_exercised
-from exhaust.catalog import VerticalEntry, discover_verticals
+from exhaust.catalog import VerticalEntry, discover_verticals, read_procedure
 from exhaust.evidence import (
     EvidenceAlreadyExistsError,
     EvidenceCopyVerificationError,
@@ -82,6 +82,7 @@ from exhaust.oracle import OracleResult
 from exhaust.rig import ToolBridge, ToolResult, UnknownMethodError, UnknownToolError
 from exhaust.rig import call as rig_call
 from exhaust.rig import method_info as rig_method_info
+from exhaust.rig import tools as rig_tools
 from exhaust.scope_contract import is_in_scope
 
 
@@ -349,7 +350,11 @@ class Harness:
         return None
 
     def _run_one_turn(self, entry: VerticalEntry) -> None:
-        request = AgentTurnRequest(vertical=entry, procedure="", available_tools=())
+        request = AgentTurnRequest(
+            vertical=entry,
+            procedure=read_procedure(self._skills_dir, entry.name),
+            available_tools=tuple(rig_tools(self._bridges)),
+        )
         action = self._agent.step(request)
 
         # A PENDING vertical only moves to IN_PROGRESS once we know the agent isn't

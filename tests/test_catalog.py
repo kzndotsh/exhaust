@@ -8,6 +8,7 @@ from exhaust.catalog import (
     discover_verticals,
     generate_catalog,
     is_catalog_up_to_date,
+    read_procedure,
     write_catalog,
 )
 
@@ -114,3 +115,33 @@ def test_check_detects_drift(tmp_path: Path) -> None:
 
 def test_check_against_missing_output_is_not_up_to_date(tmp_path: Path) -> None:
     assert is_catalog_up_to_date(tmp_path / "skills", tmp_path / "missing.json") is False
+
+
+def test_read_procedure_returns_the_body_past_front_matter(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / "injection"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: injection\nrequired: true\n---\nTry these payloads.\n"
+    )
+
+    assert read_procedure(skills_dir, "injection") == "Try these payloads."
+
+
+def test_read_procedure_looks_up_by_declared_name_not_directory_slug(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / "01-injection"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: injection\nrequired: true\n---\nProcedure text.\n"
+    )
+
+    assert read_procedure(skills_dir, "injection") == "Procedure text."
+
+
+def test_read_procedure_rejects_an_unknown_vertical(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+
+    with pytest.raises(MalformedSkillFileError):
+        read_procedure(skills_dir, "nonexistent")

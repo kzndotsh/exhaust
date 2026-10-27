@@ -45,6 +45,35 @@ class VerticalEntry:
     gate: str | None
 
 
+def _split_front_matter(text: str, source: Path) -> tuple[str, str]:
+    """Split a skill file's text into its raw front matter and body.
+
+    Parameters
+    ----------
+    text : str
+        The skill file's full contents.
+    source : Path
+        The file `text` came from, used only for error messages.
+
+    Returns
+    -------
+    tuple[str, str]
+        The raw front matter block and everything after it.
+
+    Raises
+    ------
+    MalformedSkillFileError
+        If the front matter is missing or unterminated.
+    """
+    if not text.startswith("---\n"):
+        raise MalformedSkillFileError(f"{source}: missing YAML front matter")
+    try:
+        _, raw_front_matter, body = text.split("---\n", 2)
+    except ValueError as exc:
+        raise MalformedSkillFileError(f"{source}: unterminated front matter") from exc
+    return raw_front_matter, body
+
+
 def _parse_front_matter(text: str, source: Path) -> dict[str, Any]:
     """Extract and parse a skill file's leading YAML front matter block.
 
@@ -66,12 +95,7 @@ def _parse_front_matter(text: str, source: Path) -> dict[str, Any]:
         If the front matter is missing, unterminated, invalid YAML, or
         not a mapping.
     """
-    if not text.startswith("---\n"):
-        raise MalformedSkillFileError(f"{source}: missing YAML front matter")
-    try:
-        _, raw_front_matter, _ = text.split("---\n", 2)
-    except ValueError as exc:
-        raise MalformedSkillFileError(f"{source}: unterminated front matter") from exc
+    raw_front_matter, _ = _split_front_matter(text, source)
 
     try:
         data = yaml.safe_load(raw_front_matter)
@@ -160,6 +184,57 @@ def discover_verticals(skills_dir: Path) -> list[VerticalEntry]:
         raise MalformedSkillFileError(f"duplicate vertical name(s): {sorted(duplicates)}")
 
     return sorted(entries, key=lambda entry: entry.name)
+
+
+def _find_skill_file(skills_dir: Path, name: str) -> Path:
+    """Locate the skill file that declares vertical `name` under `skills_dir`.
+
+    Mirrors `discover_verticals`'s own rule that front matter, not the
+    directory's own name, is what names a vertical: a skill directory
+    is free to be slugged differently from the `name` its front matter
+    declares, so this re-parses front matter to find the match rather
+    than guessing `skills_dir / name / SKILL_FILENAME`.
+
+    Raises
+    ------
+    MalformedSkillFileError
+        If no skill file under `skills_dir` declares `name`.
+    """
+    for skill_file in sorted(skills_dir.glob(f"*/{SKILL_FILENAME}")):
+        data = _parse_front_matter(skill_file.read_text(), skill_file)
+        if data.get("name") == name:
+            return skill_file
+    raise MalformedSkillFileError(f"{skills_dir}: no skill file declares vertical {name!r}")
+
+
+def read_procedure(skills_dir: Path, name: str) -> str:
+    """Read one vertical's procedure: its skill file's body, past the front matter (ADR 0013).
+
+    Meant to be called just-in-time for the vertical actually taking a
+    turn, never for every vertical in the catalog: that's what keeps an
+    inactive vertical's procedure out of context.
+
+    Parameters
+    ----------
+    skills_dir : Path
+        The directory `discover_verticals` reads from.
+    name : str
+        The vertical whose procedure to read.
+
+    Returns
+    -------
+    str
+        The skill file's body, with leading and trailing whitespace
+        stripped.
+
+    Raises
+    ------
+    MalformedSkillFileError
+        If no skill file under `skills_dir` declares `name`.
+    """
+    skill_file = _find_skill_file(skills_dir, name)
+    _, body = _split_front_matter(skill_file.read_text(), skill_file)
+    return body.strip()
 
 
 def generate_catalog(skills_dir: Path) -> dict[str, list[dict[str, Any]]]:

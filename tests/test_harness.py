@@ -595,6 +595,36 @@ def test_self_report_reaches_exhausted_once_every_claim_checks_out(tmp_path: Pat
     assert outcome.final_states == {"injection": VerticalState.EXHAUSTED}
 
 
+def test_run_one_turn_gives_the_agent_the_real_procedure_and_tools(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    scanner = FakeScanner()
+
+    class CapturingAgent:
+        def __init__(self) -> None:
+            self.requests: list[AgentTurnRequest] = []
+
+        def step(self, request: AgentTurnRequest) -> AgentAction:
+            self.requests.append(request)
+            return SetVerticalState(
+                vertical="injection", to=VerticalState.SKIPPED, reason="just capturing"
+            )
+
+        def observe(self, outcome: ActionOutcome) -> None:
+            del outcome
+
+    agent = CapturingAgent()
+    harness = Harness.open(
+        tmp_path, skills_dir, "roundcube", agent=agent, bridges={"fake-scanner": scanner}
+    )
+    harness.run(budget=RunBudget(max_turns=1))
+
+    assert len(agent.requests) == 1
+    request = agent.requests[0]
+    assert request.procedure == "Body."
+    assert request.available_tools == (FakeScanner.info,)
+
+
 def test_run_outcome_summary_lists_each_vertical() -> None:
     outcome = RunOutcome(
         done=True,
