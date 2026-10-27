@@ -19,7 +19,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
-from exhaust.oracle import OracleMechanism, OracleResult
+from exhaust.oracle import OracleResult, oracle_result_from_dict, oracle_result_to_dict
 
 FINDINGS_FILENAME = "findings.jsonl"
 
@@ -284,26 +284,6 @@ def _append_event(workspace_dir: Path, event: dict[str, Any]) -> None:
         f.write(json.dumps(event, sort_keys=True) + "\n")
 
 
-def _oracle_result_to_dict(oracle_result: OracleResult | None) -> dict[str, Any] | None:
-    if oracle_result is None:
-        return None
-    return {
-        "mechanism": oracle_result.mechanism.value,
-        "passed": oracle_result.passed,
-        "detail": oracle_result.detail,
-    }
-
-
-def _oracle_result_from_dict(data: dict[str, Any] | None) -> OracleResult | None:
-    if data is None:
-        return None
-    return OracleResult(
-        mechanism=OracleMechanism(data["mechanism"]),
-        passed=data["passed"],
-        detail=data["detail"],
-    )
-
-
 def _verdict_entry_from_event(event: dict[str, Any]) -> VerdictEntry:
     return VerdictEntry(
         verdict=Verdict(
@@ -314,7 +294,7 @@ def _verdict_entry_from_event(event: dict[str, Any]) -> VerdictEntry:
             contradicting_evidence=tuple(event.get("contradicting_evidence", ())),
         ),
         recorded_by=RecordedBy(event["recorded_by"]),
-        oracle_result=_oracle_result_from_dict(event.get("oracle_result")),
+        oracle_result=oracle_result_from_dict(event.get("oracle_result")),
     )
 
 
@@ -443,7 +423,7 @@ def record_verdict(
             "supporting_evidence": list(verdict.supporting_evidence),
             "contradicting_evidence": list(verdict.contradicting_evidence),
             "recorded_by": recorded_by.value,
-            "oracle_result": _oracle_result_to_dict(persisted_oracle_result),
+            "oracle_result": oracle_result_to_dict(persisted_oracle_result),
         },
     )
 
