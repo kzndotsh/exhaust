@@ -15,7 +15,13 @@ from exhaust.harness.actions import (
 )
 from exhaust.harness.agent import AgentSession, AgentTurnRequest
 from exhaust.harness.budget import RunBudget
-from exhaust.harness.core import HaltReason, Harness, RunOutcome, resume_blocked_vertical
+from exhaust.harness.core import (
+    HaltReason,
+    Harness,
+    RunOutcome,
+    resolve_pending_approval,
+    resume_blocked_vertical,
+)
 
 __all__ = [
     "ActionOutcome",
@@ -35,5 +41,6 @@ __all__ = [
     "SandboxCall",
     "SelfReport",
     "SetVerticalState",
+    "resolve_pending_approval",
     "resume_blocked_vertical",
 ]

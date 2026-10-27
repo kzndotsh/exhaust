@@ -21,6 +21,10 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from exhaust.approvals import ApprovalStatus, ConsequentialCall, ExhaustionClaim
+from exhaust.approvals import is_approved as approval_is_approved
+from exhaust.approvals import request_approval as approval_request
+from exhaust.approvals import resolve as approval_resolve
 from exhaust.attempts import record_attempt, tools_exercised
 from exhaust.catalog import VerticalEntry, discover_verticals
 from exhaust.evidence import (
@@ -77,6 +81,7 @@ from exhaust.ledger import (
 from exhaust.oracle import OracleResult
 from exhaust.rig import ToolBridge, ToolResult, UnknownMethodError, UnknownToolError
 from exhaust.rig import call as rig_call
+from exhaust.rig import method_info as rig_method_info
 from exhaust.scope_contract import is_in_scope
 
 
@@ -155,6 +160,47 @@ def resume_blocked_vertical(workspace_dir: Path, vertical: str, note: str) -> No
     transition(
         workspace_dir, vertical, VerticalState.IN_PROGRESS, reason=note, resumed_by=ResumedBy.HUMAN
     )
+
+
+def resolve_pending_approval(
+    workspace_dir: Path,
+    key: str,
+    *,
+    approve: bool,
+    note: str,
+) -> None:
+    """Approve or deny a pending consequential action or exhaustion claim (ADR 0023).
+
+    The only human-privileged entry point for `approvals.py`, the same
+    way `resume_blocked_vertical` is for the ledger: a free function, not
+    a `Harness` method, since resolving an approval needs no live
+    `AgentSession` or Rig bridges. Approving doesn't execute anything;
+    the agent must propose the same action again, and `Harness._dispatch`
+    re-checks for a matching approved record before it runs.
+
+    Parameters
+    ----------
+    workspace_dir : Path
+        The Workspace whose approvals this updates.
+    key : str
+        The approval key, from an `ActionRejected` message or a prior
+        `request_approval` call.
+    approve : bool
+        True to approve, False to deny.
+    note : str
+        Why, recorded on the record.
+
+    Raises
+    ------
+    UnknownApprovalError
+        If `key` has no record.
+    AlreadyResolvedError
+        If the record isn't currently pending.
+    NoteRequiredError
+        If `note` is empty.
+    """
+    decision = ApprovalStatus.APPROVED if approve else ApprovalStatus.DENIED
+    approval_resolve(workspace_dir, key, decision=decision, note=note)
 
 
 class Harness:
@@ -356,12 +402,48 @@ class Harness:
             return ActionRejected(f"{a.target} is not an authorized Target for this Workspace")
 
         try:
+            method = rig_method_info(self._bridges, a.tool, a.method)
+        except (UnknownToolError, UnknownMethodError) as exc:
+            return ActionRejected(str(exc))
+
+        if method.consequential:
+            outcome = self._require_human_approval(
+                ConsequentialCall(
+                    vertical=a.vertical,
+                    tool=a.tool,
+                    method=a.method,
+                    params=dict(a.params),
+                    target=a.target,
+                )
+            )
+            if outcome is not None:
+                return outcome
+
+        try:
             result = rig_call(self._bridges, a.tool, a.method, **a.params)
         except (UnknownToolError, UnknownMethodError) as exc:
             return ActionRejected(str(exc))
 
         record_attempt(self._workspace_dir, a.vertical, a.tool)
         return result
+
+    def _require_human_approval(
+        self, subject: ConsequentialCall | ExhaustionClaim
+    ) -> ActionRejected | None:
+        """Gate a consequential subject behind a human approval (ADR 0023).
+
+        Returns
+        -------
+        ActionRejected | None
+            A rejection naming the approval key to retry against, if
+            `subject` isn't currently approved; `None` once it is,
+            meaning the caller should proceed.
+        """
+        if approval_is_approved(self._workspace_dir, subject):
+            return None
+
+        key = approval_request(self._workspace_dir, subject)
+        return ActionRejected(f"awaiting human approval: {key}")
 
     def _record_finding(self, a: RecordFinding) -> ActionOutcome:
         try:
@@ -431,6 +513,20 @@ class Harness:
             self._validate_exhaustion(a.vertical, a.attestation)
         except ExhaustionNotJustifiedError as exc:
             return ActionRejected(str(exc))
+
+        # Checked out as attested, but a checked attestation is still only a
+        # claim (ADR 0023): "exhausted" is asserted completeness, a materially
+        # different and less verifiable claim than "stuck" (which routes to
+        # `blocked`), so it gets its own human gate rather than inheriting one.
+        outcome = self._require_human_approval(
+            ExhaustionClaim(
+                vertical=a.vertical,
+                tools_exercised=a.attestation.tools_exercised,
+                findings_dispositioned=a.attestation.findings_dispositioned,
+            )
+        )
+        if outcome is not None:
+            return outcome
 
         try:
             transition(
