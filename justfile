@@ -31,6 +31,10 @@ types:
 test *args:
     uv run pytest {{ args }}
 
+# Coverage, reported with missing lines. A reviewer signal, not a merge gate.
+cov:
+    uv run pytest --cov --cov-report=term-missing
+
 # The import contracts in pyproject.toml: which domain module may import which.
 layers:
     uv run lint-imports
