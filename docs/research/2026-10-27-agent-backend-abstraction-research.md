@@ -316,8 +316,18 @@ final `result` event. `--json-schema` plus `--output-format json` constrains the
 to a given JSON Schema, surfaced in a `structured_output` field — but this only shapes the
 CLI's final textual answer, not individual tool calls as they happen. `--continue`/`--resume
 <session_id>` thread multi-turn state across separate subprocess invocations; `--bare` skips
-auto-discovery of hooks/skills/MCP servers/CLAUDE.md for reproducible CI-style runs. Source:
-https://code.claude.com/docs/en/headless
+auto-discovery of hooks/skills/MCP servers/CLAUDE.md for reproducible CI-style runs — the docs now
+call `--bare` "the recommended mode for scripted and SDK calls, and will become the default for
+`-p` in a future release," and are explicit that bare mode never reads OAuth/subscription
+credentials, only `ANTHROPIC_API_KEY` or an `apiKeyHelper`. `--permission-prompts none` is the
+flag for a genuinely unattended run: it stops the process from waiting on a permission host at
+all (an Agent SDK `canUseTool` callback or a `--permission-prompt-tool`), denying anything nothing
+else resolves rather than blocking on it. The `stream-json` event vocabulary is richer than a bare
+transcript: `system/api_retry` carries a typed `error` category (`rate_limit`, `overloaded`,
+`authentication_failed`, etc.) plus `attempt`/`max_retries`/`retry_delay_ms`, and `system/init`
+carries a `capabilities` array of protocol-behavior strings for feature-detection instead of
+version-string comparison. Sources: https://code.claude.com/docs/en/headless (original pass),
+re-fetched directly 2026-10-27 for the detail above.
 
 **A variant worth distinguishing: a local headless HTTP server instead of a subprocess
 transcript (opencode).** `opencode serve` doesn't print a transcript to stdout at all — it

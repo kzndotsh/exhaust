@@ -671,6 +671,55 @@ log is functionally a hand-rolled, narrower version of what `gen_ai.*` conventio
    anything require repeated-consistency before trusting the exhaustion SelfReport? Worth
    considering if false-exhaustion-confidence is a concern.
 
+### Addendum: two shipped Claude Code primitives worth citing directly
+
+Fetched directly from `code.claude.com/docs/en/goal` and `code.claude.com/docs/en/workflows`,
+2026-10-27, after the main research pass. Both are concrete, primary-sourced instances of
+principles this document derived from papers and blog posts, which makes them worth citing as
+precedent rather than theory.
+
+**`/goal` is a shipped instance of the generator/evaluator separation principle.** Set a
+completion condition and Claude keeps working until it's met; the mechanism is that "each time
+Claude finishes a turn, Claude Code sends the condition and the conversation so far" to a
+separate, smaller model, which returns one of three verdicts — not yet met, met, or impossible —
+each with a reason fed back as guidance for the next turn. The evaluator "does not call tools, so
+it can only judge what Claude has already surfaced in the conversation," and completion is
+"decided by a fresh model rather than the one doing the work." This is precisely Anthropic's
+harness-design principle from §1 ("separating the agent doing the work from the agent judging it
+proves to be a strong lever") shipped as a product feature, applied to a different question — "is
+this task done" rather than "is this finding confirmed" — but it's the same move. It's also a
+direct, shipped precedent for gap 4 in §5's relevance section: don't trust the worker's own
+completion claim, have something structurally separate judge it. exhaust already goes further
+than `/goal` here (its validation is against persisted facts, not another model's reading of the
+same conversation), but `/goal`'s existence as a product feature is evidence this pattern is
+considered load-bearing enough to ship, not just a research recommendation.
+
+**Dynamic workflows are the most concrete, primary-sourced answer found anywhere in this research
+to the multi-agent orchestration/DAG question.** A dynamic workflow is a plain JavaScript script
+Claude writes and a runtime executes outside the conversation, so "intermediate results stay in
+script variables instead of landing in Claude's context" — the orchestration plan itself is code,
+not something an orchestrating agent reconstructs turn by turn. The primitives are `agent()` (one
+subagent), `pipeline()` (one agent per item in a list, sequential iteration with cached results),
+`parallel()` (a set of agent tasks run concurrently), and `phase()` (grouping for the progress
+view). This directly answers the abort-tree/DAG pattern that came up when a Reddit thread's
+war-stories were being evaluated for this research (see the harness-abstraction document's
+commit history): a dependency graph is expressed as ordinary code (`pipeline()` over a
+discovered list, `parallel()` across independent branches, sequenced `await`s for genuine
+dependencies) rather than a declarative graph structure, and the runtime's resumability is
+replay-based, not state-machine-based — relaunching a stopped or partially-failed run replays
+agents in start order, returns completed ones from a cache, and reruns a failed one plus
+everything the script started after it, even agents that had already completed. Concrete
+engineering details worth noting on their own: concurrency is capped (16 concurrent agents by
+default, 4,096 items per single `parallel()`/`pipeline()` call, 1,000 agents total per run,
+explicitly "prevents runaway loops"); a stalled agent (no output for a configurable window)
+restarts automatically up to 5 times before the call fails; and agents in the same fan-out that
+would share a prompt-cache prefix are deliberately staggered by up to 5 seconds so siblings read
+the first agent's cache instead of each paying full, uncached cost. None of the primary sources
+elsewhere in this document describe a comparably detailed, shipped multi-agent runtime design —
+this is the reference architecture to read first if exhaust ever needs genuine parallel
+sub-agent fan-out (e.g. investigating several verticals' independent hypotheses concurrently),
+rather than inventing an abort-tree/DAG scheduler from scratch.
+
 ## 6. Human-in-the-loop and operating principles
 
 ### Jargon — the 12 Factors (HumanLayer, github.com/humanlayer/12-factor-agents)
