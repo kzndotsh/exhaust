@@ -114,6 +114,26 @@ modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "Oracle is independent of the other base domain modules"
+type = "independence"
+modules = [
+    "exhaust.workspace",
+    "exhaust.scope_contract",
+    "exhaust.catalog",
+    "exhaust.oracle",
+]
+
+[[tool.importlinter.contracts]]
+name = "Oracle never imports findings"
+type = "forbidden"
+source_modules = [
+    "exhaust.oracle",
+]
+forbidden_modules = [
+    "exhaust.findings",
+]
+
+[[tool.importlinter.contracts]]
 name = "Domain modules never import the CLI"
 type = "forbidden"
 source_modules = [
@@ -121,6 +141,7 @@ source_modules = [
     "exhaust.scope_contract",
     "exhaust.catalog",
     "exhaust.findings",
+    "exhaust.oracle",
 ]
 forbidden_modules = [
     "exhaust.cli",
