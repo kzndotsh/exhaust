@@ -39,8 +39,8 @@ class FakeScanner:
 
     info = ToolInfo(name="fake-scanner", usage="scans fake things", doc="see fake-scanner docs")
     methods = (
-        MethodInfo(name="scan", mutates=False, consequential=False),
-        MethodInfo(name="exploit", mutates=True, consequential=True),
+        MethodInfo(name="scan", mutates=False, consequential=False, required_extent="recon"),
+        MethodInfo(name="exploit", mutates=True, consequential=True, required_extent="full"),
     )
 
     def __init__(self) -> None:
@@ -426,6 +426,38 @@ def _exploit_call() -> RealTargetCall:
     return RealTargetCall(
         vertical="injection", tool="fake-scanner", method="exploit", params={}, target="acme.com"
     )
+
+
+def test_real_target_call_needing_full_extent_is_rejected_under_a_recon_only_contract(
+    tmp_path: Path,
+) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    (tmp_path / "SCOPE_CONTRACT.yaml").write_text(
+        "target: acme.com\nbasis: owned_infrastructure\nextent: recon\n"
+    )
+    scanner = FakeScanner()
+    agent = ScriptedAgent(
+        [
+            RealTargetCall(
+                vertical="injection",
+                tool="fake-scanner",
+                method="exploit",
+                params={},
+                target="acme.com",
+            )
+        ]
+    )
+    harness = Harness.open(
+        tmp_path, skills_dir, "roundcube", agent=agent, bridges={"fake-scanner": scanner}
+    )
+    harness.run(budget=RunBudget(max_turns=1))
+
+    assert scanner.calls == []
+    assert agent.observed[0] == ActionRejected(
+        "acme.com is not an authorized Target for this Workspace"
+    )
+    assert tools_exercised(tmp_path, "injection") == frozenset()
 
 
 def test_consequential_real_target_call_waits_for_a_human(tmp_path: Path) -> None:
