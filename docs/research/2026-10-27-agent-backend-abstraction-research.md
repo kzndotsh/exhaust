@@ -161,6 +161,27 @@ against the official architecture page). No exhaust prior audit documents a Curs
 adopter; both are new findings in this research pass, not corroborated against exhaust's own
 audited tools.
 
+**Caveat: subscription (Pro/Max) auth is not a credential source exhaust should plug into the
+Claude Agent SDK.** The SDK does no authentication of its own — it spawns the `claude` binary,
+which "reads whatever credentials it's already configured with," so a machine logged into Claude
+Code via a Pro/Max subscription (no `ANTHROPIC_API_KEY` set) would have the SDK ride on that
+subscription session rather than metered API billing. Mechanically possible; not something to
+build on. Anthropic's usage policy (fetched directly, 2026-10-27,
+https://www.anthropic.com/legal/aup) prohibits, under "Do Not Abuse Our Platform," "services that
+route requests through consumer subscriptions" — aimed at reselling, but exhaust as a built tool
+reads closer to that category than to "ordinary individual use of Claude Code." Secondary
+reporting (not independently verified against Anthropic's current legal/compliance page, which
+returned 404 on direct fetch) describes Anthropic's developer guidance as API-key billing for
+anything built on the Agent SDK, and notes that an earlier line permitting OAuth tokens with the
+Agent SDK has reportedly been removed; a May 2026 plan to give Agent SDK usage its own
+subscription-linked credit tier was announced and then paused days before taking effect, which is
+itself a signal this isn't settled policy. Independent of the policy question: ADR-0021's
+credential-isolation design (a budget-capped virtual key per run, issued through a local proxy)
+has no equivalent for an OAuth subscription session — there's no key to scope or cap the same way
+— so subscription auth doesn't fit exhaust's existing credential model even if the policy
+question resolved favorably. Treat this as unresolved, not as a cost-saving option to build
+toward.
+
 **Pi (`pi.dev`, package `@earendil-works/pi-coding-agent`).** A deliberately minimal,
 provider-agnostic agent toolkit — explicitly *not* a single vendor's SDK, since it runs over
 15+ model providers through one `ModelRuntime` abstraction. `createAgentSession()` returns an
