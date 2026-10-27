@@ -41,7 +41,7 @@ reference harness both run their own model-call loop against a provider API dire
 `docs/research/2026-10-26-cyber-harness-audit.md` and
 `docs/research/2026-10-26-defending-code-reference-harness-audit.md`).
 
-## 2. Vendor agent SDKs (Claude Agent SDK, OpenAI Agents SDK, Cursor SDK, Google ADK, Pi)
+## 2. Vendor agent SDKs (Claude Agent SDK, OpenAI Agents SDK, Cursor SDK, Google ADK, Pi, fx)
 
 **What it is.** A library that owns the tool-use loop, session/context management, and (for
 Claude's SDK) the same built-in toolset Claude Code ships with, callable as a Python/TS
@@ -214,6 +214,54 @@ anything Pi itself enforces. Sources (fetched directly, 2026-10-27):
 https://pi.dev/docs/latest.md, https://pi.dev/docs/latest/how-pi-works.md,
 https://pi.dev/docs/latest/sdk.md, https://pi.dev/docs/latest/rpc.md,
 https://pi.dev/docs/latest/security.md.
+
+**fx (`fx.sh`, Vercel Labs, a sibling project to `deepsec` covered in the harness-engineering
+audit's §4).** A coding agent written in Zig, shipped as a single native binary with no runtime
+dependency, explicitly positioned to "run the same way on a laptop, in CI, or in an agent
+sandbox" rather than only inside an IDE — labeled experimental. Its embeddable core, **libfx**, is
+a separate artifact from the `fx` CLI: a JavaScript-facing agent core shipped as both a native
+Node.js addon and (experimentally) WebAssembly, with its own API surface (prompts/streaming,
+tools, images, steering, save/restore, durability) independent of the CLI's terminal UX — making
+it the only project surveyed in this document, alongside Cursor's SDK/Bridge split, that
+deliberately separates "the agent as an embeddable library" from "the agent as a CLI" as two
+first-party artifacts rather than treating the CLI as the only front end. Tools in libfx are
+"JavaScript functions the agent can call," the same plain-function-plus-schema shape as every
+other SDK surveyed here; the exact custom-tool registration call wasn't named in the pages
+reached in this pass (only `llms.txt`'s page index, not the full API reference, was fetched).
+
+**Provider flexibility is the most notable thing about fx's design.** Per its own docs, both the
+CLI and libfx can run against "AI Gateway, a ChatGPT or Grok plan, or an OpenAI-compatible
+server" — i.e. a first-party agent tool that treats a **consumer subscription login** (ChatGPT
+Plus/Pro, presumably OAuth-based like Claude Code's) as one of three equally first-class backend
+options, alongside a metered gateway and any OpenAI-compatible endpoint (Ollama, vLLM,
+OpenRouter named explicitly). This is directly relevant to the subscription-vs-API-billing
+question already raised for the Claude Agent SDK in this document: fx's own vendor treats
+subscription-backed agent use as a supported, documented path rather than a gray area, which is
+a useful data point that this pattern exists elsewhere in the field — but it says nothing about
+whether *OpenAI's or xAI's own usage policies* permit it any more cleanly than Anthropic's does;
+that would need the same kind of direct policy check given to Anthropic's AUP earlier, not fetched
+in this pass, so don't read "fx supports it" as "it's unambiguously allowed."
+
+**CLI and protocol surface.** `fx ask` runs a non-interactive request and can emit JSON
+(`fx ask --json "<prompt>"`), continuing a saved session the same way Claude Code's `--continue`/
+`--resume` does, though the exact output schema wasn't reached in this pass (the summarized page
+didn't enumerate fields; `llms-full.txt` would have them). `fx acp` serves the **Agent Client
+Protocol** over stdio — the same ACP that osmedeus (section 6) uses to drive *external* CLIs
+generically, except here fx is the thing being driven, i.e. fx is a concrete instance of "the
+external CLI an ACP-speaking orchestrator like osmedeus could plug in," not a new abstraction of
+its own. Skills load from `.fx/skills`, `~/.fx/skills`, and, notably, also from `.claude/skills`
+and `.agents/skills` — direct, first-party interoperability with Claude Code's and the open
+AGENTS.md ecosystem's skill directories, reinforcing the harness-engineering audit's §8 finding
+that the Agent Skills markdown-plus-frontmatter shape is becoming a de facto cross-vendor
+standard, not a Claude-specific convention. Default permission mode (`auto`) routes "other
+actions" through a model-based check for prompt injection or malicious behavior before holding
+them — structurally similar to Claude Code's auto-mode classifier (already covered in this
+document's §2 and the harness-engineering audit's supplementary findings), another independent
+confirmation that a separate-model-reviews-the-action pattern is converging across vendors rather
+than being one company's idiosyncratic design. Source: https://fx.sh/llms.txt and the raw GitHub
+README, both fetched directly, 2026-10-27; the full page content behind each `llms.txt` summary
+line (output schemas, the libfx API reference, ACP server setup detail) was not fetched in this
+pass and would need a follow-up read before citing exact field names.
 
 ## 3. MCP (Model Context Protocol) — exposing exhaust's own tools to an arbitrary agent
 
