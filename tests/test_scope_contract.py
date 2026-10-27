@@ -10,18 +10,14 @@ def test_no_contract_is_out_of_scope(tmp_path: Path) -> None:
 
 def test_matching_contract_is_in_scope(tmp_path: Path) -> None:
     (tmp_path / CONTRACT_FILENAME).write_text(
-        "target: example.com\n"
-        "basis: owned_infrastructure\n"
-        "extent: full web application\n"
+        "target: example.com\nbasis: owned_infrastructure\nextent: full web application\n"
     )
     assert is_in_scope(tmp_path, "example.com") is True
 
 
 def test_mismatched_target_is_out_of_scope(tmp_path: Path) -> None:
     (tmp_path / CONTRACT_FILENAME).write_text(
-        "target: example.com\n"
-        "basis: owned_infrastructure\n"
-        "extent: full web application\n"
+        "target: example.com\nbasis: owned_infrastructure\nextent: full web application\n"
     )
     assert is_in_scope(tmp_path, "other.example") is False
 
@@ -46,7 +42,5 @@ def test_non_mapping_contract_fails_closed(tmp_path: Path) -> None:
 
 
 def test_missing_field_fails_closed(tmp_path: Path) -> None:
-    (tmp_path / CONTRACT_FILENAME).write_text(
-        "target: example.com\nbasis: owned_infrastructure\n"
-    )
+    (tmp_path / CONTRACT_FILENAME).write_text("target: example.com\nbasis: owned_infrastructure\n")
     assert load_scope_contract(tmp_path) is None

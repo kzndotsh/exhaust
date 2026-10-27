@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from exhaust.catalog import (
-    MalformedSkillFile,
+    MalformedSkillFileError,
     VerticalEntry,
     discover_verticals,
     generate_catalog,
@@ -45,19 +45,15 @@ def test_gated_vertical_needs_a_gate_string(tmp_path: Path) -> None:
 
     entries = discover_verticals(skills_dir)
     assert entries == [
-        VerticalEntry(
-            name="graphql", required=False, gate="confirmed /graphql endpoint"
-        )
+        VerticalEntry(name="graphql", required=False, gate="confirmed /graphql endpoint")
     ]
 
 
 def test_required_vertical_cannot_carry_a_gate(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
-    _write_skill(
-        skills_dir, "injection", "name: injection\nrequired: true\ngate: oops\n"
-    )
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\ngate: oops\n")
 
-    with pytest.raises(MalformedSkillFile):
+    with pytest.raises(MalformedSkillFileError):
         discover_verticals(skills_dir)
 
 
@@ -65,7 +61,7 @@ def test_gated_vertical_without_a_gate_is_rejected(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
     _write_skill(skills_dir, "graphql", "name: graphql\nrequired: false\n")
 
-    with pytest.raises(MalformedSkillFile):
+    with pytest.raises(MalformedSkillFileError):
         discover_verticals(skills_dir)
 
 
@@ -75,7 +71,7 @@ def test_missing_front_matter_is_rejected(tmp_path: Path) -> None:
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text("No front matter here.\n")
 
-    with pytest.raises(MalformedSkillFile):
+    with pytest.raises(MalformedSkillFileError):
         discover_verticals(skills_dir)
 
 
@@ -84,7 +80,7 @@ def test_duplicate_vertical_names_are_rejected(tmp_path: Path) -> None:
     _write_skill(skills_dir, "one", "name: dup\nrequired: true\n")
     _write_skill(skills_dir, "two", "name: dup\nrequired: true\n")
 
-    with pytest.raises(MalformedSkillFile):
+    with pytest.raises(MalformedSkillFileError):
         discover_verticals(skills_dir)
 
 
