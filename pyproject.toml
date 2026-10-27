@@ -107,6 +107,7 @@ modules = [
     "exhaust.workspace",
     "exhaust.scope_contract",
     "exhaust.catalog",
+    "exhaust.findings",
 ]
 
 [[tool.importlinter.contracts]]
@@ -116,6 +117,7 @@ source_modules = [
     "exhaust.workspace",
     "exhaust.scope_contract",
     "exhaust.catalog",
+    "exhaust.findings",
 ]
 forbidden_modules = [
     "exhaust.cli",
