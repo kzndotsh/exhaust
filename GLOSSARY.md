@@ -1,6 +1,6 @@
 # Exhaust
 
-Exhaust is an agent-first toolkit for security research. From it you scaffold a self-contained Workspace per Target, and it provides what an agent needs to probe that Target autonomously and exhaustively: the Rig it works from, a library of skills, a methodology checklist, and the Harness that drives the agent through it.
+Exhaust is an agent-first toolkit for security research. From it you scaffold a self-contained Workspace per Target, and it provides what an agent needs to probe that Target autonomously and exhaustively: the Rig it works from, a library of skills, a Playbook, and the Harness that drives the agent through it.
 
 ## Language
 
@@ -44,8 +44,16 @@ _Avoid_: status, result
 A host-executed, independent check that confirms a Finding's evidence actually produces the claimed effect (for example, replaying a repro against the Sandbox and checking the result), as distinct from an agent's self-attested claim. A Finding may only carry the `confirmed` Verdict once an Oracle has run.
 _Avoid_: grader, judge
 
+**Playbook**:
+A Workspace's full set of Verticals: the always-required ones every Workspace walks regardless of Target, plus the gated ones that turn on once recon confirms the trust boundary they cover. Computed from the skill files themselves, never hand-maintained as a second list.
+_Avoid_: spine, methodology checklist
+
+**Vertical**:
+One item on a Playbook: a category of weakness or behavior the Harness tracks to a terminal state (for example injection, access control, race conditions). Carries `required` (always runs, or only on a confirmed trigger) and, when not required, a `gate` describing that trigger. Not a vector (an entry point on the Target) or a technique (a specific move tried against one) — those exist inside a vertical's investigation, not instead of it.
+_Avoid_: module, companion, class, category
+
 **Harness**:
-The runtime that drives an agent through a Workspace. It invokes the agent, manages its context, exposes the Rig's tools, and loops it over the Workspace's checklist of verticals until they are exhausted. The Harness runs the agent; the model is the coprocessor inside it.
+The runtime that drives an agent through a Workspace. It invokes the agent, manages its context, exposes the Rig's tools, and loops it over the Workspace's Playbook until every vertical is terminal. The Harness runs the agent; the model is the coprocessor inside it.
 _Avoid_: loop, driver, orchestrator
 
 **Disclosure**:
