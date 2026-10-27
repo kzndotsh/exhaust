@@ -63,6 +63,7 @@ ignore = [
     "D213",  # multi-line-summary-second-line: conflicts with D212, which we want
     "B008",  # function-call-in-default-argument: Typer's own API requires this
     "TRY003", # vanilla exception messages: the message carries the real detail
+    "ANN401", # any-type: a ToolBridge's **params is genuinely untyped per tool
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -114,6 +115,7 @@ modules = [
     "exhaust.ledger",
     "exhaust.delimiter",
     "exhaust.evidence",
+    "exhaust.rig",
 ]
 
 [[tool.importlinter.contracts]]
@@ -127,6 +129,7 @@ modules = [
     "exhaust.ledger",
     "exhaust.delimiter",
     "exhaust.evidence",
+    "exhaust.rig",
 ]
 
 [[tool.importlinter.contracts]]
@@ -151,6 +154,7 @@ source_modules = [
     "exhaust.ledger",
     "exhaust.delimiter",
     "exhaust.evidence",
+    "exhaust.rig",
 ]
 forbidden_modules = [
     "exhaust.cli",
