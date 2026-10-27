@@ -1,7 +1,7 @@
 from pathlib import Path
+from typing import Any
 
-import pytest
-
+from exhaust.attempts import record_attempt, tools_exercised
 from exhaust.findings import (
     FindingScope,
     RecordedBy,
@@ -29,7 +29,27 @@ from exhaust.harness import (
 )
 from exhaust.harness.agent import AgentTurnRequest
 from exhaust.ledger import VerticalState, current_state, transition
-from exhaust.rig import ToolResult
+from exhaust.rig import MethodInfo, ToolInfo, ToolResult
+
+
+class FakeScanner:
+    """A minimal ToolBridge fake, mirroring the one in test_rig.py."""
+
+    info = ToolInfo(name="fake-scanner", usage="scans fake things", doc="see fake-scanner docs")
+    methods = (MethodInfo(name="scan", mutates=False),)
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    def run(self, method: str, **params: Any) -> ToolResult:
+        self.calls.append((method, params))
+        return ToolResult(ok=True, output=f"ran {method} with {params}")
+
+
+def _write_scope_contract(workspace_dir: Path, target: str) -> None:
+    (workspace_dir / "SCOPE_CONTRACT.yaml").write_text(
+        f"target: {target}\nbasis: owned_infrastructure\nextent: full\n"
+    )
 
 
 class ScriptedAgent:
@@ -314,45 +334,148 @@ def test_record_finding_rejects_a_duplicate_claim(tmp_path: Path) -> None:
     assert len(load_findings(tmp_path)) == 1
 
 
-def test_sandbox_call_is_not_implemented_yet(tmp_path: Path) -> None:
+def test_sandbox_call_dispatches_to_the_rig_and_logs_the_attempt(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    scanner = FakeScanner()
+    agent = ScriptedAgent(
+        [SandboxCall(vertical="injection", tool="fake-scanner", method="scan", params={})]
+    )
+    harness = Harness.open(
+        tmp_path, skills_dir, "roundcube", agent=agent, bridges={"fake-scanner": scanner}
+    )
+    harness.run(budget=RunBudget(max_turns=1))
+
+    assert scanner.calls == [("scan", {})]
+    assert agent.observed == [ToolResult(ok=True, output="ran scan with {}")]
+    assert tools_exercised(tmp_path, "injection") == frozenset({"fake-scanner"})
+
+
+def test_sandbox_call_rejects_an_unknown_tool_and_logs_nothing(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
     _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
     agent = ScriptedAgent(
-        [SandboxCall(vertical="injection", tool="nuclei", method="scan", params={})]
+        [SandboxCall(vertical="injection", tool="nonexistent", method="scan", params={})]
     )
     harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=agent)
+    harness.run(budget=RunBudget(max_turns=1))
 
-    with pytest.raises(NotImplementedError):
-        harness.run(budget=RunBudget(max_turns=1))
+    assert agent.observed[0] is not None
+    assert not isinstance(agent.observed[0], ToolResult)
+    assert tools_exercised(tmp_path, "injection") == frozenset()
 
 
-def test_real_target_call_is_not_implemented_yet(tmp_path: Path) -> None:
+def test_real_target_call_rejects_out_of_scope_target(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
     _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    scanner = FakeScanner()
     agent = ScriptedAgent(
         [
             RealTargetCall(
-                vertical="injection", tool="nuclei", method="scan", params={}, target="acme.com"
+                vertical="injection",
+                tool="fake-scanner",
+                method="scan",
+                params={},
+                target="acme.com",
             )
         ]
     )
-    harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=agent)
+    harness = Harness.open(
+        tmp_path, skills_dir, "roundcube", agent=agent, bridges={"fake-scanner": scanner}
+    )
+    harness.run(budget=RunBudget(max_turns=1))
 
-    with pytest.raises(NotImplementedError):
-        harness.run(budget=RunBudget(max_turns=1))
+    assert scanner.calls == []
+    assert agent.observed[0] is not None
+    assert not isinstance(agent.observed[0], ToolResult)
+    assert tools_exercised(tmp_path, "injection") == frozenset()
 
 
-def test_self_report_is_not_implemented_yet(tmp_path: Path) -> None:
+def test_real_target_call_with_a_scope_contract_dispatches_and_logs(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    _write_scope_contract(tmp_path, "acme.com")
+    scanner = FakeScanner()
+    agent = ScriptedAgent(
+        [
+            RealTargetCall(
+                vertical="injection",
+                tool="fake-scanner",
+                method="scan",
+                params={},
+                target="acme.com",
+            )
+        ]
+    )
+    harness = Harness.open(
+        tmp_path, skills_dir, "roundcube", agent=agent, bridges={"fake-scanner": scanner}
+    )
+    harness.run(budget=RunBudget(max_turns=1))
+
+    assert scanner.calls == [("scan", {})]
+    assert agent.observed == [ToolResult(ok=True, output="ran scan with {}")]
+    assert tools_exercised(tmp_path, "injection") == frozenset({"fake-scanner"})
+
+
+def test_self_report_without_evidence_is_rejected(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
     _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
     attestation = ExhaustionAttestation(
-        tools_exercised=(), findings_dispositioned=(), no_further_avenues=True
+        tools_exercised=("fake-scanner",), findings_dispositioned=(), no_further_avenues=True
     )
     agent = ScriptedAgent([SelfReport(vertical="injection", attestation=attestation)])
     harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=agent)
+    harness.run(budget=RunBudget(max_turns=1))
 
-    with pytest.raises(NotImplementedError):
-        harness.run(budget=RunBudget(max_turns=1))
+    assert agent.observed[0] is not None
+    assert not isinstance(agent.observed[0], ToolResult)
+    assert current_state(tmp_path, "injection") == VerticalState.IN_PROGRESS
+
+
+def test_self_report_rejects_an_open_finding(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    finding = new_finding("roundcube", "injection", "SQLi", "high", FindingScope.SANDBOX, "poc.py")
+    findings_record_finding(tmp_path, finding)
+
+    attestation = ExhaustionAttestation(
+        tools_exercised=(), findings_dispositioned=(finding.id,), no_further_avenues=True
+    )
+    agent = ScriptedAgent([SelfReport(vertical="injection", attestation=attestation)])
+    harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=agent)
+    harness.run(budget=RunBudget(max_turns=1))
+
+    assert agent.observed[0] is not None
+    assert not isinstance(agent.observed[0], ToolResult)
+    assert current_state(tmp_path, "injection") == VerticalState.IN_PROGRESS
+
+
+def test_self_report_reaches_exhausted_once_every_claim_checks_out(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    finding = new_finding("roundcube", "injection", "SQLi", "high", FindingScope.SANDBOX, "poc.py")
+    findings_record_finding(tmp_path, finding)
+    transition(tmp_path, "injection", VerticalState.IN_PROGRESS)
+    record_attempt(tmp_path, "injection", "fake-scanner")
+
+    setup_agent = ScriptedAgent(
+        [ProposeVerdict(finding_id=finding.id, verdict=Verdict(type=VerdictType.FALSE_POSITIVE))]
+    )
+    Harness.open(tmp_path, skills_dir, "roundcube", agent=setup_agent).run(
+        budget=RunBudget(max_turns=1)
+    )
+
+    attestation = ExhaustionAttestation(
+        tools_exercised=("fake-scanner",),
+        findings_dispositioned=(finding.id,),
+        no_further_avenues=True,
+    )
+    agent = ScriptedAgent([SelfReport(vertical="injection", attestation=attestation)])
+    harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=agent)
+    outcome = harness.run(budget=RunBudget(max_turns=1))
+
+    assert agent.observed == [ToolResult(ok=True, output="injection -> exhausted")]
+    assert outcome.final_states == {"injection": VerticalState.EXHAUSTED}
 
 
 def test_run_outcome_summary_lists_each_vertical() -> None:
