@@ -122,6 +122,7 @@ modules = [
     "exhaust.delimiter",
     "exhaust.evidence",
     "exhaust.rig",
+    "exhaust.approvals",
     "exhaust.attempts",
 ]
 
@@ -137,6 +138,7 @@ modules = [
     "exhaust.delimiter",
     "exhaust.evidence",
     "exhaust.rig",
+    "exhaust.approvals",
     "exhaust.attempts",
 ]
 
@@ -163,6 +165,7 @@ source_modules = [
     "exhaust.delimiter",
     "exhaust.evidence",
     "exhaust.rig",
+    "exhaust.approvals",
     "exhaust.attempts",
 ]
 forbidden_modules = [
@@ -182,6 +185,7 @@ source_modules = [
     "exhaust.delimiter",
     "exhaust.evidence",
     "exhaust.rig",
+    "exhaust.approvals",
     "exhaust.attempts",
     "exhaust.harness",
 ]
