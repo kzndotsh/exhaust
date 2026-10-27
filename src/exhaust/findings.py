@@ -62,7 +62,15 @@ class AcceptedRiskOverrideError(ValueError):
 
 
 class MissingOracleResultError(ValueError):
-    """Raised when recording `confirmed` without a passing OracleResult (ADR 0008)."""
+    """Raised when recording `confirmed` with no OracleResult at all (ADR 0008)."""
+
+
+class OracleCheckFailedError(ValueError):
+    """Raised when recording `confirmed` with an OracleResult that didn't pass."""
+
+
+class ContradictingEvidenceOnRecordError(ValueError):
+    """Raised when confirming over a needs_confirmation with open contradictions (ADR 0019)."""
 
 
 def compute_finding_id(target: str, vertical: str, claim: str) -> str:
@@ -219,6 +227,23 @@ class VerdictEntry:
     recorded_by: RecordedBy
     oracle_result: OracleResult | None = None
 
+    def __post_init__(self) -> None:
+        """Enforce ADR 0008's confirmed-requires-a-passing-Oracle rule here too.
+
+        `record_verdict` already enforces this before ever constructing a
+        `VerdictEntry`, but the rule belongs on the type itself (matching
+        `Verdict.__post_init__`'s own ADR 0019 check in this file), not
+        only in one caller's function body: a `VerdictEntry` built any
+        other way (a migration, a bulk importer, a future recording path)
+        must not be able to bypass it.
+        """
+        if self.verdict.type == VerdictType.CONFIRMED and (
+            self.oracle_result is None or not self.oracle_result.passed
+        ):
+            raise MissingOracleResultError(
+                "a confirmed VerdictEntry requires a passing oracle_result"
+            )
+
 
 @dataclass(frozen=True)
 class FindingRecord:
@@ -357,7 +382,8 @@ def record_verdict(
         Who is recording it.
     oracle_result : OracleResult | None
         Required, and must have `passed=True`, when `verdict.type` is
-        `confirmed` (ADR 0008). Ignored for any other Verdict type.
+        `confirmed` (ADR 0008). Ignored, and never persisted, for any
+        other Verdict type.
 
     Raises
     ------
@@ -368,9 +394,17 @@ def record_verdict(
         and `recorded_by` is the agent: a manual accepted-risk marker is
         never silently overwritten by automation (ADR 0004).
     MissingOracleResultError
-        If `verdict.type` is `confirmed` and `oracle_result` is missing
-        or didn't pass: a `confirmed` Verdict requires a host-run Oracle,
-        not just the agent's say-so (ADR 0008).
+        If `verdict.type` is `confirmed` and no `oracle_result` was given
+        at all: a `confirmed` Verdict requires a host-run Oracle, not
+        just the agent's say-so (ADR 0008).
+    OracleCheckFailedError
+        If `verdict.type` is `confirmed` and `oracle_result` was given
+        but didn't pass.
+    ContradictingEvidenceOnRecordError
+        If `verdict.type` is `confirmed` and the latest recorded Verdict
+        is `needs_confirmation` carrying unresolved
+        `contradicting_evidence`: a promotion to confirmed is only valid
+        once nothing contradicts it on record (ADR 0019).
     """
     events = _read_events(workspace_dir)
     if not any(e["kind"] == "finding" and e["id"] == finding_id for e in events):
@@ -385,11 +419,19 @@ def record_verdict(
     ):
         raise AcceptedRiskOverrideError(finding_id)
 
-    if verdict.type == VerdictType.CONFIRMED and (
-        oracle_result is None or not oracle_result.passed
-    ):
-        raise MissingOracleResultError(finding_id)
+    if verdict.type == VerdictType.CONFIRMED:
+        if oracle_result is None:
+            raise MissingOracleResultError(finding_id)
+        if not oracle_result.passed:
+            raise OracleCheckFailedError(finding_id)
+        if (
+            latest is not None
+            and latest.verdict.type == VerdictType.NEEDS_CONFIRMATION
+            and latest.verdict.contradicting_evidence
+        ):
+            raise ContradictingEvidenceOnRecordError(finding_id)
 
+    persisted_oracle_result = oracle_result if verdict.type == VerdictType.CONFIRMED else None
     _append_event(
         workspace_dir,
         {
@@ -401,7 +443,7 @@ def record_verdict(
             "supporting_evidence": list(verdict.supporting_evidence),
             "contradicting_evidence": list(verdict.contradicting_evidence),
             "recorded_by": recorded_by.value,
-            "oracle_result": _oracle_result_to_dict(oracle_result),
+            "oracle_result": _oracle_result_to_dict(persisted_oracle_result),
         },
     )
 
