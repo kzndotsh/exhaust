@@ -1,33 +1,66 @@
-# exhaust
+<div align="center">
 
-> **⚠️ Work in progress — design phase, no code yet.** This repository currently holds only the glossary, architecture decisions, and background research produced while designing exhaust. There is no CLI, no Harness, no skills, and nothing runnable. Expect everything here, including terminology, to still change.
+<h1>exhaust</h1>
 
-Exhaust is an agent-first toolkit for security research. From it you scaffold a self-contained **Workspace** per **Target**, and it provides what an agent needs to probe that Target autonomously and exhaustively: the **Rig** it works from, a library of skills, a methodology checklist, and the **Harness** that drives the agent through it.
+<p><strong>An agent-first toolkit for security research.</strong></p>
 
-To exhaust a Target is to work through every known angle of attack until the options are spent, not to stop at the first finding.
+<a href="https://github.com/kzndotsh/exhaust/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kzndotsh/exhaust/ci.yml?branch=main&label=CI&logo=github&style=for-the-badge"></a>
+<a href="https://www.python.org/downloads/"><img alt="Python" src="https://img.shields.io/badge/python-3.12+-3776AB?logo=python&logoColor=white&style=for-the-badge"></a>
+<a href="https://docs.astral.sh/uv/"><img alt="uv" src="https://img.shields.io/badge/uv-managed-DE5FE9?logo=uv&logoColor=white&style=for-the-badge"></a>
 
-## Where things stand
+</div>
 
-The project is past the idea-sharpening stage and into recording real architecture decisions, but nothing has been built yet. What exists today:
+> [!WARNING]
+> Pre-alpha and under active development. Nothing here is stable, and terminology, structure, and behavior can all still change without notice.
 
-- **[GLOSSARY.md](GLOSSARY.md)** — the project's vocabulary: Target, Workspace, Sandbox, Rig, Scope Contract, Brief, Finding, Verdict, Oracle, Harness, Disclosure. Read this first; the rest of the docs assume it.
-- **[docs/adr/](docs/adr/)** — 22 architecture decision records, covering the Harness's design, how findings are stored and verified, how the Playbook is shaped, and the safety boundaries around testing a real Target.
-- **[docs/research/](docs/research/)** — audits of a dozen comparable tools (security-research harnesses, pentest platforms, skill libraries, and one general-purpose agent platform), each distilling what to adopt, what to reject, and why. These are what most of the ADRs are built on.
+You scaffold a self-contained **Workspace** per **Target**, and exhaust gives an agent what it needs to probe that Target autonomously and exhaustively: a **Rig** of pinned tools, a **Playbook** of verticals to work through, and a **Harness** that drives the loop. To exhaust a Target is to work through every known angle until the options are spent, not to stop at the first finding.
 
-Not yet decided: the exact Playbook (the full list of verticals an agent works through per Target) and the skills themselves. That's the next piece of design work.
+## Quick start
 
-## Core ideas so far
+```bash
+git clone https://github.com/kzndotsh/exhaust.git
+cd exhaust
+uv sync --group dev
+```
 
-- **A Scope Contract gates any real-Target testing.** With no Scope Contract in a Workspace, the agent is confined to the Sandbox. Reaching a real, remote Target requires one, and its authority can never be satisfied by anything that arrives inside the agent's own context — not a Target's response, not the agent's own text.
-- **Findings are append-only claims, not deletable records.** A Finding keeps its original record forever; a later Verdict (confirmed, false-positive, duplicate, fixed, accepted-risk) is recorded on it, never erasing it.
-- **A `confirmed` Verdict requires a host-run Oracle**, not just the agent's self-report. This is the one gap found, in some form, in essentially every comparable tool audited so far.
-- **The Harness's "done" is an explicit per-vertical ledger**, not a heuristic or the agent's own say-so.
+```bash
+# Scaffold a Workspace for a Target
+uv run exhaust new roundcube
 
-See the ADRs for the full reasoning behind each of these, and the research audits for the evidence they're built on.
+# The generated vertical catalog (empty until the Playbook locks and skill files exist)
+uv run exhaust catalog generate
+uv run exhaust catalog check
+```
 
-## Research
+`exhaust new <target>` writes `AGENTS.md`, `BRIEF.md`, a `sandbox/` placeholder, and `poc/`/`findings/` directories. It never writes a `SCOPE_CONTRACT.yaml`: with none present, anything built on top of this is confined to the Sandbox by default (see [ADR 0003](docs/adr/0003-scope-contract-gates-real-targets.md)).
 
-Fourteen repositories have been audited for architecture ideas so far: [deepsec](docs/research/2026-10-26-deepsec-audit.md), [Shannon](docs/research/2026-10-26-shannon-audit.md), [Anthropic's reference harness](docs/research/2026-10-26-defending-code-reference-harness-audit.md), [OWASP ASRH](docs/research/2026-10-26-owasp-asrh-audit.md), [Cloudflare's security-audit-skill](docs/research/2026-10-26-cloudflare-security-audit-skill-audit.md), [cyber-harness](docs/research/2026-10-26-cyber-harness-audit.md), [T3MP3ST](docs/research/2026-10-26-t3mp3st-audit.md), [ScopeSentry](docs/research/2026-10-26-scopesentry-audit.md), [osmedeus](docs/research/2026-10-26-osmedeus-audit.md), [Lynis](docs/research/2026-10-26-lynis-audit.md), [Anthropic-Cybersecurity-Skills](docs/research/2026-10-26-anthropic-cybersecurity-skills-audit.md), and [Cloudflare OS](docs/research/2026-10-26-cloudflare-os-audit.md). Each audit file states plainly what was adopted, what was rejected, and why.
+## How it's shaped
+
+- **Scope Contract gates real Targets.** No contract in a Workspace means Sandbox-only, and the gate fails closed on anything missing or malformed — never permissive by default. [`src/exhaust/scope_contract.py`](src/exhaust/scope_contract.py)
+- **Findings are append-only.** A Finding is never deleted; Verdicts (confirmed, false-positive, duplicate, fixed, accepted-risk, needs-confirmation) are recorded on it over time, and a human's `accepted_risk` verdict can't be silently overwritten by automation. [`src/exhaust/findings.py`](src/exhaust/findings.py)
+- **No hand-maintained catalog.** Whatever lists the Playbook's verticals is generated by reading skill files directly ([ADR 0016](docs/adr/0016-no-hand-maintained-vertical-catalog.md)), checked in CI so it can never silently drift.
+- **A `confirmed` Verdict needs a host-run Oracle**, not just the agent's self-report — the one gap found, in some form, in nearly every comparable tool audited so far ([ADR 0008](docs/adr/0008-confirmed-requires-a-host-run-oracle.md)). Not built yet.
+
+## Project layout
+
+```
+src/exhaust/
+├── cli/                 # Typer commands: new, catalog generate/check
+├── workspace.py         # Scaffolds a Workspace (ADR 0001, 0006)
+├── scope_contract.py    # The Scope Contract gate (ADR 0003)
+├── catalog.py           # Vertical catalog generator (ADR 0016)
+└── findings.py          # Append-only Finding/Verdict store (ADR 0004, 0007, 0019)
+```
+
+Lint, format, strict types, numpy docstrings, import boundaries, and tests all run the same way locally and in CI — see the [justfile](justfile) (`just check`) and [lefthook.yml](lefthook.yml).
+
+## Design docs
+
+The design is ahead of the code. Start here if you want the reasoning, not just the result:
+
+- **[GLOSSARY.md](GLOSSARY.md)** — the vocabulary: Target, Workspace, Sandbox, Rig, Scope Contract, Brief, Finding, Verdict, Oracle, Playbook, Vertical, Harness, Disclosure.
+- **[docs/adr/](docs/adr/)** — 22 architecture decision records, each a specific, evidenced call: how findings are verified, how the Playbook is shaped, the safety boundaries around testing a real Target.
+- **[docs/research/](docs/research/)** — audits of 24 comparable tools (security-research harnesses, pentest platforms, skill libraries), each stating plainly what exhaust adopted, rejected, and why. Most of the ADRs are built on these.
 
 ## Responsible use
 
