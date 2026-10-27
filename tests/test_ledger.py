@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 
 from exhaust.ledger import (
+    LEDGER_FILENAME,
+    AlreadyTerminalError,
     HumanResumeRequiredError,
     InvalidTransitionError,
     ReasonRequiredError,
@@ -95,6 +97,31 @@ def test_skipped_accepts_no_further_transitions(tmp_path: Path) -> None:
 
     with pytest.raises(InvalidTransitionError):
         transition(tmp_path, "graphql", VerticalState.IN_PROGRESS)
+
+
+def test_terminal_transition_raises_the_specific_already_terminal_error(tmp_path: Path) -> None:
+    transition(tmp_path, "injection", VerticalState.IN_PROGRESS)
+    transition(tmp_path, "injection", VerticalState.EXHAUSTED, reason="no further avenues")
+
+    with pytest.raises(AlreadyTerminalError):
+        transition(tmp_path, "injection", VerticalState.IN_PROGRESS)
+
+
+def test_unreachable_but_non_terminal_transition_is_a_plain_invalid_transition(
+    tmp_path: Path,
+) -> None:
+    # pending -> blocked is unreachable but pending is not terminal, so this
+    # must raise the generic error, not AlreadyTerminalError.
+    with pytest.raises(InvalidTransitionError) as exc_info:
+        transition(tmp_path, "injection", VerticalState.BLOCKED, reason="n/a")
+    assert not isinstance(exc_info.value, AlreadyTerminalError)
+
+
+def test_no_leftover_temp_file_after_a_transition(tmp_path: Path) -> None:
+    transition(tmp_path, "injection", VerticalState.IN_PROGRESS)
+
+    assert (tmp_path / LEDGER_FILENAME).is_file()
+    assert not (tmp_path / f"{LEDGER_FILENAME}.tmp").exists()
 
 
 def test_is_workspace_done_false_when_anything_is_pending(tmp_path: Path) -> None:
