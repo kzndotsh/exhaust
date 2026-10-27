@@ -17,6 +17,16 @@ pre-commit:
     uv-lock:
       glob: "pyproject.toml"
       run: uv lock --check
+    catalog:
+      # Self-heals the generated catalog locally (ADR 0016) instead of
+      # only catching drift in CI.
+      glob: "skills/**/SKILL.md"
+      run: uv run exhaust catalog generate && git add catalog/verticals.generated.json
+
+commit-msg:
+  commands:
+    conventional-commits:
+      run: uv run python scripts/check_commit_message.py {1}
 
 pre-push:
   commands:
