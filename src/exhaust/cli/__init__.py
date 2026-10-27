@@ -24,8 +24,6 @@ def _version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
-    version: bool = typer.Option(
-        False, "--version", callback=_version_callback, is_eager=True
-    ),
+    version: bool = typer.Option(False, "--version", callback=_version_callback, is_eager=True),
 ) -> None:
     """exhaust: agent-first toolkit for security research."""

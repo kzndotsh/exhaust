@@ -60,9 +60,7 @@ def scaffold_workspace(path: Path, target: str) -> None:
 
     sandbox_dir = path / "sandbox"
     sandbox_dir.mkdir()
-    (sandbox_dir / "docker-compose.yml").write_text(
-        SANDBOX_COMPOSE_TEMPLATE.format(target=target)
-    )
+    (sandbox_dir / "docker-compose.yml").write_text(SANDBOX_COMPOSE_TEMPLATE.format(target=target))
 
     (path / "poc").mkdir()
     (path / "findings").mkdir()
