@@ -1,12 +1,15 @@
-"""Findings and Verdicts (ADR 0004, ADR 0007, ADR 0019).
+"""Findings and Verdicts (ADR 0004, ADR 0007, ADR 0008, ADR 0019).
 
 A Finding is an append-only claim: it is never deleted, and a Verdict
 recorded on it never overwrites prior history, only adds to it. This
 module is the structured data shape and append-only store a future
 Harness tool call (ADR 0007) would write through, not the tool call
-itself, and it deliberately knows nothing about the Scope Contract or
-any other domain module (see the independence contract in
-pyproject.toml).
+itself. It deliberately knows nothing about the Scope Contract or any
+other domain module except `oracle`: ADR 0010 requires the function
+that accepts a Finding as evidence-backed to itself refuse one that
+didn't pass through an Oracle, so this module is the one place
+permitted to depend on `exhaust.oracle` (see pyproject.toml's import
+contracts).
 """
 
 import hashlib
@@ -15,6 +18,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
+
+from exhaust.oracle import OracleMechanism, OracleResult
 
 FINDINGS_FILENAME = "findings.jsonl"
 
@@ -54,6 +59,10 @@ class UnknownFindingError(ValueError):
 
 class AcceptedRiskOverrideError(ValueError):
     """Raised when automation tries to overwrite a human accepted-risk Verdict."""
+
+
+class MissingOracleResultError(ValueError):
+    """Raised when recording `confirmed` without a passing OracleResult (ADR 0008)."""
 
 
 def compute_finding_id(target: str, vertical: str, claim: str) -> str:
@@ -193,7 +202,7 @@ class Verdict:
 
 @dataclass(frozen=True)
 class VerdictEntry:
-    """A Verdict plus who recorded it.
+    """A Verdict plus who recorded it and what Oracle result backs it.
 
     Attributes
     ----------
@@ -201,10 +210,14 @@ class VerdictEntry:
         The recorded Verdict.
     recorded_by : RecordedBy
         Who recorded it.
+    oracle_result : OracleResult | None
+        The Oracle result backing a `confirmed` Verdict (ADR 0008), or
+        None for any other Verdict type.
     """
 
     verdict: Verdict
     recorded_by: RecordedBy
+    oracle_result: OracleResult | None = None
 
 
 @dataclass(frozen=True)
@@ -246,20 +259,45 @@ def _append_event(workspace_dir: Path, event: dict[str, Any]) -> None:
         f.write(json.dumps(event, sort_keys=True) + "\n")
 
 
+def _oracle_result_to_dict(oracle_result: OracleResult | None) -> dict[str, Any] | None:
+    if oracle_result is None:
+        return None
+    return {
+        "mechanism": oracle_result.mechanism.value,
+        "passed": oracle_result.passed,
+        "detail": oracle_result.detail,
+    }
+
+
+def _oracle_result_from_dict(data: dict[str, Any] | None) -> OracleResult | None:
+    if data is None:
+        return None
+    return OracleResult(
+        mechanism=OracleMechanism(data["mechanism"]),
+        passed=data["passed"],
+        detail=data["detail"],
+    )
+
+
+def _verdict_entry_from_event(event: dict[str, Any]) -> VerdictEntry:
+    return VerdictEntry(
+        verdict=Verdict(
+            type=VerdictType(event["type"]),
+            note=event.get("note", ""),
+            requirements=event.get("requirements"),
+            supporting_evidence=tuple(event.get("supporting_evidence", ())),
+            contradicting_evidence=tuple(event.get("contradicting_evidence", ())),
+        ),
+        recorded_by=RecordedBy(event["recorded_by"]),
+        oracle_result=_oracle_result_from_dict(event.get("oracle_result")),
+    )
+
+
 def _latest_entry_for(events: list[dict[str, Any]], finding_id: str) -> VerdictEntry | None:
     latest: VerdictEntry | None = None
     for event in events:
         if event["kind"] == "verdict" and event["finding_id"] == finding_id:
-            latest = VerdictEntry(
-                verdict=Verdict(
-                    type=VerdictType(event["type"]),
-                    note=event.get("note", ""),
-                    requirements=event.get("requirements"),
-                    supporting_evidence=tuple(event.get("supporting_evidence", ())),
-                    contradicting_evidence=tuple(event.get("contradicting_evidence", ())),
-                ),
-                recorded_by=RecordedBy(event["recorded_by"]),
-            )
+            latest = _verdict_entry_from_event(event)
     return latest
 
 
@@ -303,6 +341,7 @@ def record_verdict(
     finding_id: str,
     verdict: Verdict,
     recorded_by: RecordedBy,
+    oracle_result: OracleResult | None = None,
 ) -> None:
     """Append a Verdict to an existing Finding's history.
 
@@ -316,6 +355,9 @@ def record_verdict(
         The Verdict to record.
     recorded_by : RecordedBy
         Who is recording it.
+    oracle_result : OracleResult | None
+        Required, and must have `passed=True`, when `verdict.type` is
+        `confirmed` (ADR 0008). Ignored for any other Verdict type.
 
     Raises
     ------
@@ -325,6 +367,10 @@ def record_verdict(
         If the latest recorded Verdict is a human-recorded accepted_risk
         and `recorded_by` is the agent: a manual accepted-risk marker is
         never silently overwritten by automation (ADR 0004).
+    MissingOracleResultError
+        If `verdict.type` is `confirmed` and `oracle_result` is missing
+        or didn't pass: a `confirmed` Verdict requires a host-run Oracle,
+        not just the agent's say-so (ADR 0008).
     """
     events = _read_events(workspace_dir)
     if not any(e["kind"] == "finding" and e["id"] == finding_id for e in events):
@@ -339,6 +385,11 @@ def record_verdict(
     ):
         raise AcceptedRiskOverrideError(finding_id)
 
+    if verdict.type == VerdictType.CONFIRMED and (
+        oracle_result is None or not oracle_result.passed
+    ):
+        raise MissingOracleResultError(finding_id)
+
     _append_event(
         workspace_dir,
         {
@@ -350,6 +401,7 @@ def record_verdict(
             "supporting_evidence": list(verdict.supporting_evidence),
             "contradicting_evidence": list(verdict.contradicting_evidence),
             "recorded_by": recorded_by.value,
+            "oracle_result": _oracle_result_to_dict(oracle_result),
         },
     )
 
@@ -388,17 +440,6 @@ def load_findings(workspace_dir: Path) -> list[FindingRecord]:
             histories[finding.id] = []
             order.append(finding.id)
         elif event["kind"] == "verdict":
-            histories[event["finding_id"]].append(
-                VerdictEntry(
-                    verdict=Verdict(
-                        type=VerdictType(event["type"]),
-                        note=event.get("note", ""),
-                        requirements=event.get("requirements"),
-                        supporting_evidence=tuple(event.get("supporting_evidence", ())),
-                        contradicting_evidence=tuple(event.get("contradicting_evidence", ())),
-                    ),
-                    recorded_by=RecordedBy(event["recorded_by"]),
-                )
-            )
+            histories[event["finding_id"]].append(_verdict_entry_from_event(event))
 
     return [FindingRecord(finding=findings[fid], history=tuple(histories[fid])) for fid in order]
