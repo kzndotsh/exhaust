@@ -6,7 +6,7 @@ Important framing difference: this tool is static-source-first by design, and ex
 
 ## Adopted, or strongly validated
 
-**A small always-on core plus recon-gated domain modules, never a flat list.** Nine target-neutral attack classes (injection, access control, business logic, and similar) run on every audit. Ten domain modules (web auth, client-side, cloud/IaC, AI/LLM, memory safety, supply chain, protocols, desktop/IPC, resource exhaustion, data lifecycle) are selected in only when recon finds the specific trust boundary that module exists to cover, explicitly never by matching a language or dependency keyword. Adopted as [ADR 0011](../adr/0011-spine-is-core-plus-gated-modules.md).
+**A small always-on core plus recon-gated domain modules, never a flat list.** Nine target-neutral attack classes (injection, access control, business logic, and similar) run on every audit. Ten domain modules (web auth, client-side, cloud/IaC, AI/LLM, memory safety, supply chain, protocols, desktop/IPC, resource exhaustion, data lifecycle) are selected in only when recon finds the specific trust boundary that module exists to cover, explicitly never by matching a language or dependency keyword. Adopted as [ADR 0011](../adr/0011-playbook-verticals-are-required-or-gated.md).
 
 **A vertical's internal shape, resolved with working code.** This answers the open tension from the reference-harness audit directly. A vertical here is neither a numbered fill-in-the-blank checklist nor pure open-ended prose: it's a fixed catalog of named attack classes, each described as one dense paragraph of hunting instruction (not a yes/no item), with front-loaded false-positive guards and the same hard evidentiary gate repeated in every file (`confirmed` needs a complete source trace plus bounded local evidence, or it's `needs_validation` naming exactly what's missing).
 
@@ -35,6 +35,6 @@ Important framing difference: this tool is static-source-first by design, and ex
 ## What this settled for exhaust
 
 - [ADR 0010](../adr/0010-evidence-promotion-is-parent-trusted.md): evidence promotion is parent-trusted.
-- [ADR 0011](../adr/0011-spine-is-core-plus-gated-modules.md): the spine is a core plus recon-gated domain modules.
+- [ADR 0011](../adr/0011-playbook-verticals-are-required-or-gated.md): the spine is a core plus recon-gated domain modules.
 - Confirms [ADR 0008](../adr/0008-confirmed-requires-a-host-run-oracle.md)'s Oracle design as stronger than even the most verification-focused tool audited.
 - Still open, for spine-locking time: how broad exhaust's domain-module set should be.
