@@ -13,6 +13,7 @@ from exhaust.findings import (
 from exhaust.findings import record_finding as findings_record_finding
 from exhaust.harness import (
     ActionOutcome,
+    ActionRejected,
     AgentAction,
     ExhaustionAttestation,
     HaltReason,
@@ -25,6 +26,7 @@ from exhaust.harness import (
     SandboxCall,
     SelfReport,
     SetVerticalState,
+    resolve_pending_approval,
     resume_blocked_vertical,
 )
 from exhaust.harness.agent import AgentTurnRequest
@@ -36,7 +38,10 @@ class FakeScanner:
     """A minimal ToolBridge fake, mirroring the one in test_rig.py."""
 
     info = ToolInfo(name="fake-scanner", usage="scans fake things", doc="see fake-scanner docs")
-    methods = (MethodInfo(name="scan", mutates=False),)
+    methods = (
+        MethodInfo(name="scan", mutates=False, consequential=False),
+        MethodInfo(name="exploit", mutates=True, consequential=True),
+    )
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, Any]]] = []
@@ -417,6 +422,78 @@ def test_real_target_call_with_a_scope_contract_dispatches_and_logs(tmp_path: Pa
     assert tools_exercised(tmp_path, "injection") == frozenset({"fake-scanner"})
 
 
+def _exploit_call() -> RealTargetCall:
+    return RealTargetCall(
+        vertical="injection", tool="fake-scanner", method="exploit", params={}, target="acme.com"
+    )
+
+
+def test_consequential_real_target_call_waits_for_a_human(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    _write_scope_contract(tmp_path, "acme.com")
+    scanner = FakeScanner()
+
+    agent = ScriptedAgent([_exploit_call()])
+    Harness.open(
+        tmp_path, skills_dir, "roundcube", agent=agent, bridges={"fake-scanner": scanner}
+    ).run(budget=RunBudget(max_turns=1))
+
+    assert scanner.calls == []
+    rejection = agent.observed[0]
+    assert isinstance(rejection, ActionRejected)
+    assert rejection.reason.startswith("awaiting human approval: ")
+    key = rejection.reason.removeprefix("awaiting human approval: ")
+
+    # Re-proposing before a human acts stays rejected, same key: nothing
+    # executes just because the agent asked again.
+    agent = ScriptedAgent([_exploit_call()])
+    Harness.open(
+        tmp_path, skills_dir, "roundcube", agent=agent, bridges={"fake-scanner": scanner}
+    ).run(budget=RunBudget(max_turns=1))
+    assert scanner.calls == []
+    assert agent.observed == [rejection]
+
+    resolve_pending_approval(tmp_path, key, approve=True, note="reviewed the plan")
+
+    # Approving doesn't execute it: the agent must propose it again.
+    assert scanner.calls == []
+
+    agent = ScriptedAgent([_exploit_call()])
+    Harness.open(
+        tmp_path, skills_dir, "roundcube", agent=agent, bridges={"fake-scanner": scanner}
+    ).run(budget=RunBudget(max_turns=1))
+
+    assert scanner.calls == [("exploit", {})]
+    assert agent.observed == [ToolResult(ok=True, output="ran exploit with {}")]
+    assert tools_exercised(tmp_path, "injection") == frozenset({"fake-scanner"})
+
+
+def test_denied_consequential_call_stays_rejected(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    _write_scope_contract(tmp_path, "acme.com")
+    scanner = FakeScanner()
+
+    agent = ScriptedAgent([_exploit_call()])
+    Harness.open(
+        tmp_path, skills_dir, "roundcube", agent=agent, bridges={"fake-scanner": scanner}
+    ).run(budget=RunBudget(max_turns=1))
+    rejection = agent.observed[0]
+    assert isinstance(rejection, ActionRejected)
+    key = rejection.reason.removeprefix("awaiting human approval: ")
+
+    resolve_pending_approval(tmp_path, key, approve=False, note="too risky for this engagement")
+
+    agent = ScriptedAgent([_exploit_call()])
+    Harness.open(
+        tmp_path, skills_dir, "roundcube", agent=agent, bridges={"fake-scanner": scanner}
+    ).run(budget=RunBudget(max_turns=1))
+
+    assert scanner.calls == []
+    assert agent.observed[0] == ActionRejected(f"awaiting human approval: {key}")
+
+
 def test_self_report_without_evidence_is_rejected(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
     _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
@@ -470,6 +547,14 @@ def test_self_report_reaches_exhausted_once_every_claim_checks_out(tmp_path: Pat
         findings_dispositioned=(finding.id,),
         no_further_avenues=True,
     )
+    agent = ScriptedAgent([SelfReport(vertical="injection", attestation=attestation)])
+    Harness.open(tmp_path, skills_dir, "roundcube", agent=agent).run(budget=RunBudget(max_turns=1))
+
+    rejection = agent.observed[0]
+    assert isinstance(rejection, ActionRejected)
+    key = rejection.reason.removeprefix("awaiting human approval: ")
+    resolve_pending_approval(tmp_path, key, approve=True, note="checked the evidence")
+
     agent = ScriptedAgent([SelfReport(vertical="injection", attestation=attestation)])
     harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=agent)
     outcome = harness.run(budget=RunBudget(max_turns=1))

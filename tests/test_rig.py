@@ -18,8 +18,8 @@ class FakeScanner:
 
     info = ToolInfo(name="fake-scanner", usage="scans fake things", doc="see fake-scanner docs")
     methods = (
-        MethodInfo(name="scan", mutates=False),
-        MethodInfo(name="delete_findings", mutates=True),
+        MethodInfo(name="scan", mutates=False, consequential=False),
+        MethodInfo(name="delete_findings", mutates=True, consequential=False),
     )
 
     def __init__(self) -> None:
