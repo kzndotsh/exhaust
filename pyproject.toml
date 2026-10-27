@@ -149,7 +149,7 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Domain modules never import the CLI"
+name = "Domain modules never import harness"
 type = "forbidden"
 source_modules = [
     "exhaust.workspace",
@@ -161,6 +161,25 @@ source_modules = [
     "exhaust.delimiter",
     "exhaust.evidence",
     "exhaust.rig",
+]
+forbidden_modules = [
+    "exhaust.harness",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain modules and harness never import the CLI"
+type = "forbidden"
+source_modules = [
+    "exhaust.workspace",
+    "exhaust.scope_contract",
+    "exhaust.catalog",
+    "exhaust.findings",
+    "exhaust.oracle",
+    "exhaust.ledger",
+    "exhaust.delimiter",
+    "exhaust.evidence",
+    "exhaust.rig",
+    "exhaust.harness",
 ]
 forbidden_modules = [
     "exhaust.cli",
