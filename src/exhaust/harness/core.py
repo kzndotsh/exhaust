@@ -4,16 +4,16 @@
 actions and the privileged domain calls those actions can trigger. It is
 the one module permitted to compose every other domain module (`ledger`,
 `findings`, `oracle`, `rig`, `scope_contract`, `evidence`, `delimiter`,
-`catalog`); every other domain module stays independent of the others,
-enforced by `import-linter`.
+`catalog`, `attempts`); every other domain module stays independent of
+the others, enforced by `import-linter`.
 
-This slice implements the `RecordFinding`, `ProposeVerdict`, and
-`SetVerticalState` actions end to end. `SandboxCall`, `RealTargetCall`,
-and `SelfReport` are left as explicit `NotImplementedError` seams: the
-first two need a real Rig tool-bridge composition to be worth wiring up
-beyond what's already proven in `rig`'s own tests, and `SelfReport`
-needs a decision on where its persisted per-vertical attempt log lives
-(see the architect synthesis) before `_validate_exhaustion` can be real.
+Every `AgentAction` variant is implemented end to end. `SandboxCall` and
+`RealTargetCall` both dispatch through the Rig's one call gate;
+`RealTargetCall` additionally re-checks the Scope Contract immediately
+before the call, never trusting an earlier check (ADR 0003). Both record
+what they actually ran to `attempts.py`'s per-vertical log, which is what
+lets `SelfReport`'s `_validate_exhaustion` check a claimed `tools_exercised`
+against fact instead of taking the agent's word for it.
 """
 
 from collections.abc import Mapping
@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from exhaust.attempts import record_attempt, tools_exercised
 from exhaust.catalog import VerticalEntry, discover_verticals
 from exhaust.evidence import (
     EvidenceAlreadyExistsError,
@@ -31,6 +32,7 @@ from exhaust.evidence import (
     promote_evidence,
 )
 from exhaust.findings import (
+    TERMINAL_VERDICT_TYPES,
     AcceptedRiskOverrideError,
     ContradictingEvidenceOnRecordError,
     FindingAlreadyExistsError,
@@ -39,6 +41,7 @@ from exhaust.findings import (
     RecordedBy,
     UnknownFindingError,
     Verdict,
+    load_findings,
     new_finding,
 )
 from exhaust.findings import (
@@ -51,6 +54,8 @@ from exhaust.harness.actions import (
     ActionOutcome,
     ActionRejected,
     AgentAction,
+    ExhaustionAttestation,
+    ExhaustionNotJustifiedError,
     ProposeVerdict,
     RealTargetCall,
     RecordFinding,
@@ -70,7 +75,9 @@ from exhaust.ledger import (
     transition,
 )
 from exhaust.oracle import OracleResult
-from exhaust.rig import ToolBridge, ToolResult
+from exhaust.rig import ToolBridge, ToolResult, UnknownMethodError, UnknownToolError
+from exhaust.rig import call as rig_call
+from exhaust.scope_contract import is_in_scope
 
 
 class HaltReason(StrEnum):
@@ -314,25 +321,47 @@ class Harness:
         """Validate and perform one proposed action, or reject it.
 
         The single chokepoint: the only path from an untrusted action to
-        a real effect anywhere in this module. `_active` names the
-        vertical this turn belongs to; unused until the `SandboxCall`,
-        `RealTargetCall`, and `SelfReport` branches are implemented.
+        a real effect anywhere in this module. `_active` is unused: every
+        action already names its own vertical.
         """
         match action:
-            case SandboxCall():
-                raise NotImplementedError("sandbox tool calls: no Rig composition wired up yet")
-            case RealTargetCall():
-                raise NotImplementedError("real-Target tool calls: no Rig composition wired up yet")
+            case SandboxCall() as a:
+                return self._sandbox_call(a)
+            case RealTargetCall() as a:
+                return self._real_target_call(a)
             case RecordFinding() as a:
                 return self._record_finding(a)
             case ProposeVerdict() as a:
                 return self._propose_verdict(a)
-            case SelfReport():
-                raise NotImplementedError(
-                    "exhaustion validation: persisted attempt-log location not decided yet"
-                )
+            case SelfReport() as a:
+                return self._self_report(a)
             case SetVerticalState() as a:
                 return self._set_state(a)
+
+    def _sandbox_call(self, a: SandboxCall) -> ActionOutcome:
+        try:
+            result = rig_call(self._bridges, a.tool, a.method, **a.params)
+        except (UnknownToolError, UnknownMethodError) as exc:
+            return ActionRejected(str(exc))
+
+        record_attempt(self._workspace_dir, a.vertical, a.tool)
+        return result
+
+    def _real_target_call(self, a: RealTargetCall) -> ActionOutcome:
+        # Re-checked here, not only when the agent proposed the call: the Scope
+        # Contract on disk is the live authority (ADR 0003), and a contract
+        # revoked mid-run must take effect before the next real-Target action,
+        # not merely before the next one the agent happens to propose.
+        if not is_in_scope(self._workspace_dir, a.target):
+            return ActionRejected(f"{a.target} is not an authorized Target for this Workspace")
+
+        try:
+            result = rig_call(self._bridges, a.tool, a.method, **a.params)
+        except (UnknownToolError, UnknownMethodError) as exc:
+            return ActionRejected(str(exc))
+
+        record_attempt(self._workspace_dir, a.vertical, a.tool)
+        return result
 
     def _record_finding(self, a: RecordFinding) -> ActionOutcome:
         try:
@@ -396,3 +425,62 @@ class Harness:
             return ActionRejected(str(exc))
 
         return ToolResult(ok=True, output=f"{a.vertical} -> {a.to.value}")
+
+    def _self_report(self, a: SelfReport) -> ActionOutcome:
+        try:
+            self._validate_exhaustion(a.vertical, a.attestation)
+        except ExhaustionNotJustifiedError as exc:
+            return ActionRejected(str(exc))
+
+        try:
+            transition(
+                self._workspace_dir,
+                a.vertical,
+                VerticalState.EXHAUSTED,
+                reason="self-reported exhausted",
+            )
+        except (InvalidTransitionError, ReasonRequiredError) as exc:
+            return ActionRejected(str(exc))
+
+        return ToolResult(ok=True, output=f"{a.vertical} -> exhausted")
+
+    def _validate_exhaustion(self, vertical: str, attestation: ExhaustionAttestation) -> None:
+        """Check an attestation's claims against facts this Harness already holds.
+
+        Never takes `no_further_avenues` on faith: it's necessary but not
+        sufficient. The other two claims are checked against the two
+        records this module itself writes, `attempts.py`'s tool log and
+        `findings.py`'s store, not against anything the agent supplies.
+
+        Raises
+        ------
+        ExhaustionNotJustifiedError
+            If any claim doesn't hold up.
+        """
+        if not attestation.no_further_avenues:
+            raise ExhaustionNotJustifiedError(f"{vertical}: doesn't attest no further avenues")
+
+        claimed_tools = set(attestation.tools_exercised)
+        actually_run = tools_exercised(self._workspace_dir, vertical)
+        never_run = claimed_tools - actually_run
+        if never_run:
+            raise ExhaustionNotJustifiedError(
+                f"{vertical}: claims tools never actually dispatched: {sorted(never_run)}"
+            )
+
+        vertical_findings = [
+            record
+            for record in load_findings(self._workspace_dir)
+            if record.finding.vertical == vertical
+        ]
+        actual_ids = {record.finding.id for record in vertical_findings}
+        if set(attestation.findings_dispositioned) != actual_ids:
+            raise ExhaustionNotJustifiedError(
+                f"{vertical}: findings_dispositioned doesn't match this vertical's findings"
+            )
+
+        for record in vertical_findings:
+            if record.latest is None or record.latest.verdict.type not in TERMINAL_VERDICT_TYPES:
+                raise ExhaustionNotJustifiedError(
+                    f"{vertical}: finding {record.finding.id} has no terminal verdict"
+                )
