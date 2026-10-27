@@ -11,7 +11,7 @@
 </div>
 
 > [!WARNING]
-> Pre-alpha and under active development. Nothing here is stable, and terminology, structure, and behavior can all still change without notice.
+> Nothing here is stable; terminology, structure, and behavior can all still change without notice.
 
 You scaffold a self-contained **Workspace** per **Target**, and exhaust gives an agent what it needs to probe that Target autonomously and exhaustively: a **Rig** of pinned tools, a **Playbook** of verticals to work through, and a **Harness** that drives the loop. To exhaust a Target is to work through every known angle until the options are spent, not to stop at the first finding.
 
