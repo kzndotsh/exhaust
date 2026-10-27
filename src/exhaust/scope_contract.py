@@ -8,6 +8,7 @@ Target action rather than permitting it.
 """
 
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, cast
 
@@ -16,6 +17,22 @@ import yaml
 CONTRACT_FILENAME = "SCOPE_CONTRACT.yaml"
 
 VALID_BASES = frozenset({"owned_infrastructure", "bug_bounty_scope", "written_permission"})
+
+
+class _Extent(StrEnum):
+    """The two-tier extent vocabulary (ADR 0024), private to this module.
+
+    Nothing outside `scope_contract.py` needs the enum itself: a Rig
+    method declares its required tier as a plain string (ADR 0024's
+    independence rationale), and this module is the only place that
+    interprets what those strings mean or how they compare.
+    """
+
+    RECON = "recon"
+    FULL = "full"
+
+
+_EXTENT_RANK: dict[_Extent, int] = {_Extent.RECON: 0, _Extent.FULL: 1}
 
 
 @dataclass(frozen=True)
@@ -29,7 +46,7 @@ class ScopeContract:
     basis : str
         The authority basis: one of `VALID_BASES`.
     extent : str
-        The permitted extent of testing.
+        The permitted extent of testing: `"recon"` or `"full"` (ADR 0024).
     """
 
     target: str
@@ -73,14 +90,14 @@ def load_scope_contract(workspace_dir: Path) -> ScopeContract | None:
         return None
     if basis not in VALID_BASES:
         return None
-    if not isinstance(extent, str) or not extent:
+    if not isinstance(extent, str) or extent not in set(_Extent):
         return None
 
     return ScopeContract(target=target, basis=basis, extent=extent)
 
 
-def is_in_scope(workspace_dir: Path, action_target: str) -> bool:
-    """Check whether `action_target` is authorized for this Workspace.
+def is_in_scope(workspace_dir: Path, action_target: str, required_extent: str) -> bool:
+    """Check whether `action_target` is authorized for this Workspace (ADR 0024).
 
     This is the gate every real-Target action must pass before it
     executes. Re-check at the point of action, not only when the action
@@ -93,13 +110,29 @@ def is_in_scope(workspace_dir: Path, action_target: str) -> bool:
         The Workspace directory to load the Scope Contract from.
     action_target : str
         The Target the pending action would touch.
+    required_extent : str
+        The tier the proposed action's Rig method declares it needs
+        (`"recon"` or `"full"`). A value outside that vocabulary fails
+        closed, the same as any other malformed input here: a bridge
+        that can't say what it needs gets nothing.
 
     Returns
     -------
     bool
-        True only if a valid contract exists and names this exact Target.
+        True only if a valid contract exists, names this exact Target,
+        and its own extent is at least as permissive as `required_extent`.
     """
     contract = load_scope_contract(workspace_dir)
     if contract is None:
         return False
-    return contract.target == action_target
+    if contract.target != action_target:
+        return False
+
+    try:
+        required = _Extent(required_extent)
+    except ValueError:
+        return False
+
+    # Both values are already validated members of _Extent by this point:
+    # contract.extent by load_scope_contract, required by the lookup above.
+    return _EXTENT_RANK[_Extent(contract.extent)] >= _EXTENT_RANK[required]
