@@ -454,10 +454,24 @@ domain logic, and both now fixed and regression-tested:
   field, now passed as `--model` alongside `--provider` in `launch()`'s argv.
 
 Both are pinned by `tests/test_pi_adapter_session.py::test_launch_uses_the_real_pi_cli_flags`. What
-this smoke test still doesn't cover, by design: no model credentials means no prompt was ever sent
+this smoke test still didn't cover, by design: no model credentials means no prompt was ever sent
 and no tool was ever actually invoked by a live model, so the relay round trip itself (a real call
-arriving over the Unix socket from a live `pi` run) remains the one thing only a credentialed run
-can prove.
+arriving over the Unix socket from a live `pi` run) remained the one thing only a credentialed run
+could prove.
+
+A follow-up credentialed run closed that gap. A live model, reached through a local
+Anthropic-compatible gateway (a real Claude model behind a proxy, configured into Pi via a
+`models.json` provider `baseUrl` override, per `docs/custom-provider.md`), drove the real
+`PiAgentSession.launch()` → `step()` → `observe()` path against the real `gate/extension.ts`: the
+model called `exhaust_handshake` first as instructed, then `set_vertical_state`, both relayed over
+the real Unix socket and translated by `translate.py` into a real `SetVerticalState` action; the
+adapter answered it and tore the subprocess down cleanly. Every prior layer of testing (unit tests
+against fakes, a real local socket with nothing calling it, a no-credential spawn of the real
+binary) is now joined by this: the one thing none of them could prove, that a live model actually
+exercises the relay as designed, is proven. This run used throwaway scratch config (a temporary
+`PI_CODING_AGENT_DIR`, a `models.json` override, a short-lived Unix socket) — nothing it depended on
+was committed, and `PiLaunchConfig.provider_base_url` (the ADR 0021 seam) is still not plumbed by
+the adapter itself; the override lived entirely in Pi's own config for this one run.
 
 ## Open questions and risks
 
@@ -482,15 +496,19 @@ can prove.
   the real installed package's docs, not guessed. `launch()` now passes it at spawn
   (`tests/test_pi_adapter_session.py::test_launch_spawns_pi_with_builtin_tools_disabled`), so the
   `tool_call` hook is genuine defense-in-depth on top of a host-enforced restriction, not the sole
-  boundary. Still unverified: an actual live run confirming `--no-builtin-tools` behaves as
-  documented in practice.
+  boundary. **Resolved by the credentialed live run**: that run spawned Pi with
+  `--no-builtin-tools` set, and the model never saw or attempted a built-in tool, only the seven
+  relay tools — consistent with the flag behaving as documented, though a single clean run doesn't
+  rule out every edge case the way a dedicated adversarial test would.
 
 ## Next implementation step
 
 Done: `translate.py`, `schema.py`, `rpc.py`, `relay.py`, `session.py`, and `gate/extension.ts` are
-all implemented and tested (see Implementation reconciliation). The next real step is an actual
-end-to-end run against a live `pi` subprocess with real model credentials — the one thing this
-pass couldn't verify, since it had neither.
+all implemented and tested (see Implementation reconciliation). An end-to-end run against a live
+`pi` subprocess with real model credentials is also done. What's left is wiring this into an actual
+`exhaust run` CLI path — nothing has called `PiAgentSession.launch()` from `Harness.run()` yet — and
+ADR 0021's credential-proxy implementation, so `provider_base_url` stops being a named stub that a
+scratch `models.json` override has to stand in for.
 
 ## Explicitly out of scope
 
@@ -500,8 +518,8 @@ pass couldn't verify, since it had neither.
   `baseUrl`-shaped proxy mechanism found for either).
 - Compaction, retry/backoff tuning, and model-provider selection policy inside Pi itself — left at
   Pi's own defaults, which is the point of using it.
-- The gate extension's build/bundling pipeline, beyond assuming Pi can load a raw `.ts` file via
-  `--extensions` as documented; if that assumption is wrong, that's an implementation detail to
-  fix, not an architectural one.
+- The gate extension's build/bundling pipeline, beyond loading the raw `.ts` file directly via
+  `--extension`, confirmed against the real CLI and now verified working end to end against a live
+  model.
 - Pi's own public-SDK-gap maintenance burden (ADR 0025 names this cost explicitly); not pre-solved
   here, inherited over time the same way it is for every other serious Pi integrator.

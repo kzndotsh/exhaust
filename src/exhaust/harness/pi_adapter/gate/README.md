@@ -17,11 +17,12 @@ type definitions (not just assumed from documentation) as part of writing this f
 A later no-credential smoke test went further: it loaded this exact file into a real
 `pi --mode rpc` subprocess (via `--extension`, Pi's own `jiti` runtime transform, not
 `tsc`) and confirmed all seven tools and the `tool_call` hook register with no runtime
-error. What still hasn't been verified: an actual end-to-end run against a live `pi`
-subprocess with real model credentials, where a live model actually calls one of these
-tools and a real call travels the Unix socket. That needs its own pass before this is
-trusted in production — see `docs/artifacts/2026-10-27-pi-agent-session-design.md`'s
-open questions.
+error. A follow-up credentialed run went all the way: a real live model, talking through
+a local Anthropic-compatible gateway, actually called the handshake tool and then
+`set_vertical_state` over the real Unix socket, and `PiAgentSession` translated and
+answered both — the first time any part of this adapter has been proven against a live
+model rather than a fake, a local socket with no model behind it, or a type checker. See
+`docs/artifacts/2026-10-27-pi-agent-session-design.md`'s reconciliation log.
 
 ## Keeping this in sync with the Python side
 
