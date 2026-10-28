@@ -1,5 +1,5 @@
 {
-  description = "exhaust's Rig: the shared host environment it attacks from (GLOSSARY.md, ADR 0012)";
+  description = "exhaust dev shell: uv, just, and the Rig's pinned tools (nmap)";
 
   inputs = {
     # Pinned to the exact commit NixHub indexes for nmap 7.991 (src/exhaust/rig/catalog.py's
