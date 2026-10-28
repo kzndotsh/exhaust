@@ -2,7 +2,7 @@
 
 This is a draft for discussion, synthesized from three parallel reviews of every file in `docs/research/`, every ADR in `docs/adr/`, and `GLOSSARY.md`, then worked through in a grilling session. It is explicitly **not** the Playbook lock. Per standing instruction, the Playbook stays unlocked until you say the audit campaign is done, and in any case [ADR 0016](../adr/0016-no-hand-maintained-vertical-catalog.md) means this document can never *become* the Playbook's source of truth even once locked — see §1 for why, and §6 for what the real source of truth has to look like instead.
 
-A later cross-check of this draft against primary sources (OWASP WSTG, OWASP ASVS, PortSwigger's own taxonomy) is recorded in [docs/research/2026-10-26-playbook-proposal-cross-check.md](../research/2026-10-26-playbook-proposal-cross-check.md). Its findings are folded into §3, §4, and §7 below as flagged, undecided input — none of them resolve anything on their own.
+A later cross-check of this draft against primary sources (OWASP WSTG, OWASP ASVS, PortSwigger's own taxonomy) is recorded in [docs/research/2026-10-26-playbook-proposal-cross-check.md](../research/2026-10-26-playbook-proposal-cross-check.md). Its findings are folded into §3, §4, and §7 below as flagged, undecided input — none of them resolve anything on their own. A follow-up pass against three more primary sources (OWASP Top 10:2025, Bugcrowd's VRT, the CWE Top 25) is recorded in [docs/research/2026-10-28-playbook-proposal-additional-sources.md](../research/2026-10-28-playbook-proposal-additional-sources.md) — same status: additional input, not a decision.
 
 ## 0. Vocabulary (settled this round)
 
