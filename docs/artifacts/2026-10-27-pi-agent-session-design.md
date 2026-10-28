@@ -365,36 +365,76 @@ from a wire-protocol enumeration rather than an active, self-proving handshake c
 
 ## Implementation reconciliation
 
-Empty. No implementation exists yet.
+Before writing any code, a verification spike installed the real published package
+(`@earendil-works/pi-coding-agent@1.4.0`) and read its actual shipped type definitions and docs,
+rather than implementing against the sketch's assumptions on faith. Two of those assumptions were
+wrong, caught before they became bugs:
+
+- **There is no `customTools` constructor option on `createAgentSession()`.** Custom tools are
+  registered inside an extension via `pi.registerTool({name, label, description, parameters,
+  execute})`, confirmed directly from `examples/sdk/06-extensions.ts` in the installed package.
+  This doesn't change the design's conclusion (six relay tools, Rig catalog as prose) — it changes
+  *where* those six tools are declared: inside `gate/extension.ts` itself, hand-authored with
+  `typebox`'s `Type.Object(...)`, not generated from a Python-written schema file an env var
+  pointed at. `schema.py` is now the parity anchor a test pins (`RELAY_TOOL_FIELDS`), not a
+  generator; `gate/extension.ts` is the implementation, kept in sync by hand, per its own README.
+- **`ctx.ui` is not a general-purpose arbitrary-payload channel.** Its dialog methods
+  (`select`/`confirm`/`input`/`editor`) are real and do round-trip over RPC, confirmed from
+  `docs/rpc-extension-ui.md` and `examples/extensions/rpc-demo.ts` in the installed package, but
+  each has a fixed, narrow response shape, and — decisively — **a dialog auto-resolves with a
+  default value if the client doesn't answer in time.** That is the one property this design
+  cannot accept anywhere near an authorization decision: a hung decision-channel silently defaulting
+  to "allow" is exactly the failure ADR 0023 exists to rule out. The relay instead runs over a
+  dedicated Unix domain socket (`relay.py`, `UnixSocketRelayChannel`) that this adapter owns
+  outright, with its own explicit timeout semantics (never auto-allow on timeout) rather than
+  inheriting Pi's. The gate handshake is now a seventh registered tool (`exhaust_handshake`) the
+  opening prompt explicitly instructs the model to call first, rather than an `onSessionStart`
+  hook calling `ctx.ui.request(...)` (which also doesn't exist) — proven, not assumed, by
+  `PiAgentSession._begin_vertical`'s unit tests.
+
+One assumption was independently confirmed correct: **`new_session` is a real, documented
+top-level RPC command** (`{"type": "new_session"}`, `docs/rpc-commands.md`), so the primary
+single-subprocess, multi-session-via-`new_session()` design needed no fallback after all; the
+fully-specified per-vertical-subprocess alternative in this doc's history was never required.
+
+Implemented: `src/exhaust/harness/pi_adapter/` (`errors.py`, `translate.py`, `schema.py`, `rpc.py`,
+`relay.py`, `session.py`, `gate/extension.ts`), with full test coverage for every pure-Python path
+and the real Unix-socket implementation (`tests/test_pi_adapter_*.py`, 40 tests), and the gate
+extension's TypeScript independently checked clean (`tsc --noEmit`, zero errors) against the real
+installed package and `typebox` type definitions. **Not yet verified: an actual end-to-end run
+against a live `pi` subprocess with real model credentials** — everything above is proven against
+real, installed types and documentation, and against this adapter's own logic through fakes and a
+real local socket, but no live model has ever actually called one of these tools. That remains the
+next real risk before trusting this in production.
 
 ## Open questions and risks
 
-- **Does `pi --mode rpc --no-session` actually support starting a fresh session mid-subprocess
-  (`PiRpc.new_session()`) with a clean context, the way the primary design assumes?** This needs a
-  short spike against the real `pi` binary before Phase D starts in earnest. If it doesn't, adopt
-  the fully-specified fallback above (one subprocess per vertical) rather than redesigning.
-- **Does the `extension_ui_request`/`extension_ui_response` channel's `value` field carry an
-  arbitrary JSON object in both directions** (needed for `{ok, output}` on the way back), or only
-  a narrower shape like `{confirmed: bool}`? The audit's `rpc-types.ts` finding says `value: Value`
-  (arbitrary), but the *response* direction specifically should be confirmed before
-  `translate.outcome_to_wire` is implemented against it.
-- **Is `onSessionStart` guaranteed to fire before the first `tool_call`** in RPC mode, so the
-  handshake reliably precedes any real action? If not, `_verify_gate` needs a different trigger
-  (e.g., a synthetic first prompt whose only legal response is the handshake call).
+- **Resolved by the verification spike**: `new_session` is real (confirmed); the
+  `extension_ui_request`/`response` channel does carry structured values, but is reserved for
+  genuine user-facing dialogs only, never the relay itself, which uses its own socket instead; the
+  handshake no longer depends on `onSessionStart` timing at all, since it's a tool call the opening
+  prompt explicitly requests.
 - **How poor would Pi's tool-call accuracy actually be** on the loose `{tool, method, params}`
   shape without per-method schemas, in practice, against real procedure text? If retries prove
   expensive, is a richer `doc` string (e.g. an embedded, prose-rendered method table) enough, or
-  does this eventually justify the rejected `ToolInfo` widening as its own future ADR?
-- **Where exactly does `PiLaunchConfig.provider_base_url` get plumbed** — a config file, a CLI
-  flag, an env var — once ADR 0021's proxy actually exists? Named here as the seam; the plumbing
-  itself is a stub until that proxy lands.
+  does this eventually justify the rejected `ToolInfo` widening as its own future ADR? Still open;
+  only answerable against a live model.
+- **Where exactly does `PiLaunchConfig.provider_base_url` get plumbed** — a Pi provider config
+  file, a CLI flag, an env var — once ADR 0021's proxy actually exists? Still a named stub; not
+  plumbed by this implementation.
+- **The exact `--tools` flag syntax for disabling Pi's built-in tools entirely** (so only the seven
+  relay tools exist) wasn't confirmed against a live run; `cli.md` documents the flag's existence
+  and general shape but not a verified "disable everything" invocation. The design doesn't depend
+  on getting this right, by choice: the `tool_call` hook's allowlist check blocks anything that
+  isn't one of the seven relay tools regardless of what `--tools` does, so correctness doesn't rest
+  on this flag being spelled correctly.
 
 ## Next implementation step
 
-Write `translate.py` and `schema.py` as pure functions, with full tests against `actions.py`, and
-nothing else — no subprocess, no RPC. They pin down the exact wire contract (`RelayCall` in,
-`AgentAction` out; `ActionOutcome` in, a wire reply out) that `rpc.py` and `session.py` both get
-built against afterward.
+Done: `translate.py`, `schema.py`, `rpc.py`, `relay.py`, `session.py`, and `gate/extension.ts` are
+all implemented and tested (see Implementation reconciliation). The next real step is an actual
+end-to-end run against a live `pi` subprocess with real model credentials — the one thing this
+pass couldn't verify, since it had neither.
 
 ## Explicitly out of scope
 

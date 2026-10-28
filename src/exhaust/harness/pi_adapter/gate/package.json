@@ -1,0 +1,14 @@
+{
+  "name": "exhaust-pi-gate",
+  "private": true,
+  "description": "exhaust's thin Pi gate extension (ADR 0025). Relays every tool call to the Harness; decides nothing itself.",
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "typebox": "^1.3.27"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  }
+}

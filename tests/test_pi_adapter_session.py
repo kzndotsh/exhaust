@@ -1,0 +1,181 @@
+from collections import deque
+from pathlib import Path
+
+import pytest
+
+from exhaust.catalog import VerticalEntry
+from exhaust.harness.actions import ActionRejected, SandboxCall
+from exhaust.harness.agent import AgentTurnRequest
+from exhaust.harness.pi_adapter.errors import AgentWentSilentError, GateNotLoadedError
+from exhaust.harness.pi_adapter.relay import PendingRelayCall
+from exhaust.harness.pi_adapter.schema import HANDSHAKE_TOOL_NAME
+from exhaust.harness.pi_adapter.session import PiAgentSession, PiLaunchConfig
+from exhaust.rig import ToolInfo
+
+
+class FakeRpc:
+    def __init__(self) -> None:
+        self.prompts: list[tuple[str, str | None]] = []
+        self.new_sessions = 0
+
+    def prompt(self, text: str, *, streaming_behavior: str | None = None) -> None:
+        self.prompts.append((text, streaming_behavior))
+
+    def new_session(self) -> None:
+        self.new_sessions += 1
+
+
+class FakePendingCall:
+    def __init__(self, tool_name: str, call_input: dict[str, object]) -> None:
+        self.tool_name = tool_name
+        self.input = call_input
+        self.responses: list[dict[str, object]] = []
+
+    def respond(self, payload: dict[str, object]) -> None:
+        self.responses.append(payload)
+
+
+class FakeRelay:
+    """A scripted `RelayChannel`: a queue of pending calls, or `None` to simulate a timeout."""
+
+    def __init__(self, scripted: list[PendingRelayCall | None]) -> None:
+        self._queue: deque[PendingRelayCall | None] = deque(scripted)
+
+    def accept_once(self, *, timeout: float) -> PendingRelayCall | None:
+        return self._queue.popleft() if self._queue else None
+
+
+def _cfg(**overrides: object) -> PiLaunchConfig:
+    defaults: dict[str, object] = {
+        "pi_executable": Path("/usr/local/bin/pi"),
+        "provider": "anthropic",
+        "provider_base_url": None,
+        "gate_extension_dir": Path("/tmp/gate"),
+        "handshake_timeout_s": 1.0,
+        "turn_poll_timeout_s": 1.0,
+        "settle_reprompts": 2,
+    }
+    defaults.update(overrides)
+    return PiLaunchConfig(**defaults)  # type: ignore[arg-type]
+
+
+def _request(vertical: str = "injection") -> AgentTurnRequest:
+    return AgentTurnRequest(
+        vertical=VerticalEntry(name=vertical, required=True, gate=None),
+        procedure="Try these payloads.",
+        available_tools=(ToolInfo(name="fake-scanner", usage="scans", doc="see docs"),),
+    )
+
+
+def test_step_verifies_the_handshake_before_returning_the_first_action() -> None:
+    handshake = FakePendingCall(HANDSHAKE_TOOL_NAME, {})
+    real_input: dict[str, object] = {"tool": "fake-scanner", "method": "scan", "params": {}}
+    real_call = FakePendingCall("sandbox_call", real_input)
+    relay = FakeRelay([handshake, real_call])
+    rpc = FakeRpc()
+    session = PiAgentSession(rpc, relay, _cfg())
+
+    action = session.step(_request())
+
+    expected = SandboxCall(vertical="injection", tool="fake-scanner", method="scan", params={})
+    assert action == expected
+    assert rpc.new_sessions == 1
+    assert handshake.responses == [{"ok": True, "output": ""}]
+
+
+def test_step_raises_gate_not_loaded_when_handshake_never_arrives() -> None:
+    relay = FakeRelay([None])  # the accept_once call for the handshake times out
+    session = PiAgentSession(FakeRpc(), relay, _cfg())
+
+    with pytest.raises(GateNotLoadedError):
+        session.step(_request())
+
+
+def test_step_raises_gate_not_loaded_when_a_real_call_arrives_before_the_handshake() -> None:
+    impersonator = FakePendingCall("sandbox_call", {"tool": "x", "method": "y", "params": {}})
+    relay = FakeRelay([impersonator])
+    session = PiAgentSession(FakeRpc(), relay, _cfg())
+
+    with pytest.raises(GateNotLoadedError):
+        session.step(_request())
+    assert impersonator.responses == [{"ok": False, "output": "expected the handshake tool first"}]
+
+
+def test_switching_vertical_opens_a_fresh_session() -> None:
+    handshake1 = FakePendingCall(HANDSHAKE_TOOL_NAME, {})
+    call1 = FakePendingCall("set_vertical_state", {"reason": "skip"})
+    handshake2 = FakePendingCall(HANDSHAKE_TOOL_NAME, {})
+    call2 = FakePendingCall("set_vertical_state", {"reason": "skip too"})
+    relay = FakeRelay([handshake1, call1, handshake2, call2])
+    rpc = FakeRpc()
+    session = PiAgentSession(rpc, relay, _cfg())
+
+    session.step(_request("injection"))
+    session.observe(None)
+    session.step(_request("auth"))
+
+    assert rpc.new_sessions == 2
+
+
+def test_resuming_the_same_vertical_does_not_reopen_a_session() -> None:
+    handshake = FakePendingCall(HANDSHAKE_TOOL_NAME, {})
+    call1 = FakePendingCall("set_vertical_state", {"reason": "first"})
+    call2 = FakePendingCall("set_vertical_state", {"reason": "second"})
+    relay = FakeRelay([handshake, call1, call2])
+    rpc = FakeRpc()
+    session = PiAgentSession(rpc, relay, _cfg())
+
+    session.step(_request("injection"))
+    session.observe(None)
+    session.step(_request("injection"))
+
+    assert rpc.new_sessions == 1
+
+
+def test_observe_answers_the_pending_call_with_the_translated_outcome() -> None:
+    handshake = FakePendingCall(HANDSHAKE_TOOL_NAME, {})
+    real_input: dict[str, object] = {"tool": "fake-scanner", "method": "scan", "params": {}}
+    call = FakePendingCall("sandbox_call", real_input)
+    relay = FakeRelay([handshake, call])
+    session = PiAgentSession(FakeRpc(), relay, _cfg())
+
+    session.step(_request())
+    session.observe(ActionRejected("not in scope"))
+
+    assert call.responses == [{"ok": False, "output": "not in scope"}]
+
+
+def test_malformed_relay_call_is_answered_inline_and_never_reaches_the_harness() -> None:
+    handshake = FakePendingCall(HANDSHAKE_TOOL_NAME, {})
+    bad_call = FakePendingCall("sandbox_call", {"tool": "fake-scanner"})  # missing method/params
+    good_call = FakePendingCall("set_vertical_state", {"reason": "ok now"})
+    relay = FakeRelay([handshake, bad_call, good_call])
+    session = PiAgentSession(FakeRpc(), relay, _cfg())
+
+    action = session.step(_request())
+
+    assert action.reason == "ok now"  # type: ignore[union-attr]
+    assert bad_call.responses  # answered inline, not surfaced as the step() result
+    assert bad_call.responses[0]["ok"] is False
+
+
+def test_turn_settling_idle_sends_a_follow_up_nudge_then_recovers() -> None:
+    handshake = FakePendingCall(HANDSHAKE_TOOL_NAME, {})
+    real_call = FakePendingCall("set_vertical_state", {"reason": "done"})
+    relay = FakeRelay([handshake, None, real_call])  # one idle timeout, then the real action
+    rpc = FakeRpc()
+    session = PiAgentSession(rpc, relay, _cfg(settle_reprompts=2))
+
+    session.step(_request())
+
+    nudges = [p for p in rpc.prompts if p[1] == "followUp"]
+    assert len(nudges) == 1
+
+
+def test_turn_going_silent_past_every_reprompt_raises() -> None:
+    handshake = FakePendingCall(HANDSHAKE_TOOL_NAME, {})
+    relay = FakeRelay([handshake, None, None, None])  # handshake, then settle forever
+    session = PiAgentSession(FakeRpc(), relay, _cfg(settle_reprompts=2))
+
+    with pytest.raises(AgentWentSilentError):
+        session.step(_request())
