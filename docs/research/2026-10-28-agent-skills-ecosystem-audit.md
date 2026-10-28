@@ -1,0 +1,51 @@
+# Agent Skills ecosystem audit: nine sources, before writing exhaust's own vertical skill files
+
+Requested ahead of actually locking the Playbook and writing real `skills/<vertical>/SKILL.md` files, to check exhaust's own schema (`docs/artifacts/2026-10-26-playbook-proposal.md` §2) and its generator discipline (ADR 0016) against what the rest of the industry actually does, before committing to a shape. Nine sources, fetched live across three parallel passes, not from training memory:
+
+- Anthropic's own Agent Skills spec: <https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview>
+- agentskills.io, the open-standard spec site: <https://agentskills.io/home>
+- skills.sh (Vercel): <https://www.skills.sh/docs> + <https://github.com/vercel-labs/skills>
+- Cursor's skills docs: <https://cursor.com/docs/skills>
+- `intellectronica/ruler`: <https://github.com/intellectronica/ruler>
+- OpenSpec: <https://openspec.dev/>
+- Microsoft Agent Framework skills: <https://learn.microsoft.com/en-us/agent-framework/agents/skills>
+- Google Cloud's AI agent skills page: <https://cloud.google.com/discover/ai-agent-skills> (page body wouldn't render via fetch — not independently confirmed, noted below)
+
+## The headline finding: this is a real, converging open standard, not three vendors reinventing the same thing
+
+agentskills.io states outright that "the Agent Skills format" was "originally developed by Anthropic, released as an open standard, and has been adopted by a growing number of agent products." Confirmed independently: Microsoft's Agent Framework docs name it explicitly as "Anthropic's Agent Skills format, verbatim," link to agentskills.io as the spec, and name interoperability as a goal ("reuse the same skill across different Agent Skills-compatible products"), listing Claude Code, Cursor, Codex, and GitHub Copilot as compatible. Cursor's own docs independently confirm the same shape (directory + `SKILL.md`, same required-field names). Vercel's skills.sh tooling also targets the same format for distribution/installation. Four independently-confirmed implementations agreeing on one shape is a real signal, not coincidence.
+
+**The shape**: a skill is a *directory*, not a bare file, containing a required `SKILL.md` (YAML frontmatter + Markdown body) plus optional `scripts/`, `references/`, `assets/` subdirectories. Required frontmatter: `name` (≤64 chars, lowercase letters/numbers/hyphens only, must match the parent directory name — confirmed by Anthropic, agentskills.io, Cursor, and Microsoft independently) and `description` (≤1024 chars, must state both *what* the skill does and *when* to use it). Optional, from the open standard agentskills.io formalizes and Microsoft adopted verbatim: `license`, `compatibility` (free-text environment requirements), `metadata` (free-form string map, recommend unique keys per client to avoid collisions), `allowed-tools` (experimental, space-separated pre-approved tool list).
+
+**Progressive disclosure is explicit and three/four-tiered everywhere it's specified**: Level 1 (`name`+`description`, ~100 tokens, loaded for every installed skill always) → Level 2 (`SKILL.md` body, loaded only once a skill is triggered, recommended under 5,000 tokens / 500 lines) → Level 3 (bundled scripts/references/assets, loaded only on actual reference; a script's own source never enters context, only its run output). Microsoft's version adds an explicit "load_skill tool" as the Level 1→2 trigger mechanism. agentskills.io adds a concrete nesting rule: keep reference-file chains to one level deep from `SKILL.md` itself — avoid deep nesting.
+
+## What this means against exhaust's own already-written ADRs: independent convergence, not a gap to close
+
+Three of exhaust's own ADRs, written before this audit and without reference to the open standard, land on structurally identical reasoning:
+
+- **ADR 0013** (skills use progressive disclosure): "a short top-level entry... and a separate, more detailed doc that only gets loaded... when that vertical or tool is actually invoked" is, almost word for word, the open standard's Level 1 → Level 2 split.
+- **ADR 0017** (skill descriptions carry a routing contract): "a description is the only text an agent sees before deciding which skill to load; the body never gets read until that decision is already made" is the exact same claim the open standard's `description` field requirement is built on (state what *and* when, because that's all that's visible pre-trigger).
+- **ADR 0022** (community skill content is signed and verified): goes further than every single source checked here. None of Anthropic, agentskills.io, Microsoft, Cursor, or Vercel specify any cryptographic signing or provenance mechanism for third-party skills — every one of them relies on "only install from trusted sources" plus a manual-audit recommendation (Anthropic's enterprise tier adds an opt-in content-scanning feature, still not a signature check). This is confirmed as a deliberate point where exhaust's own design is stricter than the field it's drawing from, not an oversight to fix.
+
+No contradiction found anywhere between exhaust's existing design and the open standard's actual shape. The two differences worth naming as decisions, not accidents:
+
+1. **`name` matching the directory name** is a convention exhaust's §2 schema doesn't currently state explicitly, though `skills/README.md` already implies the same one-subdirectory-per-vertical shape. Worth adding as an explicit, generator-enforced rule (fail the generator, not just note it in prose) — cheap, and every implementation checked enforces it.
+2. **`description`/`use_when`/`do_not_use_for` as three separate fields** (ADR 0017) versus the open standard's single `description` field expected to carry both halves in prose. This is a deliberate, justified departure, not a gap: exhaust's routing contract is lint-checked as three distinct pieces specifically because near-neighbor verticals (IDOR/BOLA/BFLA) make ambiguous routing a real failure mode at the scale exhaust's catalog is heading toward — a stricter, more literally-checkable contract than "write a good description," which is all the open standard asks for. No reason to collapse these back into one free-text field; exhaust's own vertical skill files are read by exhaust's own bespoke generator, never by a literal Agent-Skills-compatible runtime, so there's no interop cost to staying stricter.
+
+## Discovery and staleness: exhaust's generator discipline is stricter than everything checked, not behind it
+
+This is the most load-bearing finding for ADR 0016. **None of the nine sources use a generated, committed, CI-checked catalog as their actual discovery mechanism.** Anthropic, Vercel's skills.sh, and Cursor all do runtime directory scanning (2–3 levels deep, with documented shadowing/fallback rules for conflicting locations) — the skill set is whatever the filesystem happens to contain at launch, never diffed against a committed artifact. agentskills.io ships a validator (`skills-ref validate`), but it checks one skill directory's frontmatter at a time, not a catalog-wide index. OpenSpec's closest equivalent, its "verify" step, is a manual or agent-run check that implementation matches spec — not an automated generator, not a CI gate; its own `init`/`update` commands generate derived agent-directory files explicitly described as "never update on their own," i.e., the exact staleness risk ADR 0016 exists to prevent.
+
+The one genuine precedent for exhaust's actual approach came from an unexpected direction: **`intellectronica/ruler`**, a tool solving a structurally similar but different problem (one source-of-truth ruleset, fanned out into every AI tool's own native config format). Its own recommended discipline — regenerate locally, then wire a CI check that reruns the generator and fails the build on any diff against what's committed — is the identical shape ADR 0016 already specifies for exhaust's catalog, arrived at independently for a different artifact. That's real, external validation that generate-then-CI-diff is the correct engineering answer to this class of problem, not a reason to add anything exhaust doesn't already have.
+
+**Conclusion for the Playbook's generator**: nothing here suggests changing ADR 0016's design. If anything, it's ahead of every piece of tooling checked, including the open standard's own reference tooling. The two additions worth making are additive, not corrective: adopt the `name`-matches-directory-name rule as a generator-enforced check (not just documented convention), and consider adding the open standard's size guidance (SKILL.md body under ~500 lines / 5,000 tokens, reference chains one level deep) as an explicit lint rule alongside ADR 0017's existing routing-contract lint, since it's the same kind of mechanically-checkable budget discipline ADR 0013 already argues for in prose.
+
+## Sources that didn't add much
+
+**OpenSpec** is a different paradigm (spec-driven development workflow: propose → spec → apply → verify → archive) rather than a skill-distribution format — relevant only for the "verify" step comparison above, nothing in its schema maps onto exhaust's vertical files.
+
+**Google Cloud's page** would not render via fetch (client-side/JS-gated); secondhand sources describe a `google/skills` repo using the same `SKILL.md` + YAML frontmatter shape with `name`/`category`/`description` fields, consistent with everything else found here, but this is explicitly *not* independently confirmed and shouldn't be cited as settled.
+
+## What this doesn't settle
+
+This still isn't the Playbook lock — it's input for when the catalog's schema actually gets finalized, same status as both prior cross-checks. Two small, concrete schema deltas are now on the table for whenever §2 gets revisited: enforce `name` == directory name in the generator, and add a body-size budget check. Everything else in exhaust's existing design is confirmed sound against nine live-checked sources, not merely unchallenged.
