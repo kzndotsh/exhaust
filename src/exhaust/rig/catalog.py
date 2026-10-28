@@ -37,7 +37,9 @@ class PinnedTool:
 PINNED_TOOLS: tuple[PinnedTool, ...] = (
     PinnedTool(
         name="nmap",
-        version="7.992",
+        # Matches flake.nix's pinned nixpkgs commit exactly (ADR 0026), not the newest
+        # upstream tag: this is now an enforceable pin, not just a named intent.
+        version="7.991",
         source="https://github.com/nmap/nmap",
         platform="linux-x86_64",
     ),
