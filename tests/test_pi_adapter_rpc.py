@@ -14,15 +14,23 @@ class FakeTransport:
     `respond_with` decides what `response` record (if any) a written
     command earns; it's called with the parsed command and returns the
     response body (sans `id`/`type`), or `None` to enqueue nothing. Extra
-    session events can be queued directly via `queue_event`.
+    session events can be queued directly via `queue_event`. `eof=True`
+    makes an empty queue mean "the stream closed" (`read_line` returns
+    `None`); otherwise an empty queue means "nothing yet" (`read_line`
+    raises `TimeoutError`), matching the real transport's distinction
+    between EOF and a stalled subprocess.
     """
 
     def __init__(
-        self, respond_with: Callable[[dict[str, object]], dict[str, object] | None]
+        self,
+        respond_with: Callable[[dict[str, object]], dict[str, object] | None],
+        *,
+        eof: bool = False,
     ) -> None:
         self.written: list[dict[str, object]] = []
         self._respond_with = respond_with
         self._stdout: deque[str] = deque()
+        self._eof = eof
 
     def queue_event(self, event: dict[str, object]) -> None:
         self._stdout.append(json.dumps(event))
@@ -34,8 +42,12 @@ class FakeTransport:
         if reply is not None:
             self._stdout.append(json.dumps({**reply, "id": command["id"]}))
 
-    def read_line(self) -> str | None:
-        return self._stdout.popleft() if self._stdout else None
+    def read_line(self, *, timeout: float) -> str | None:
+        if not self._stdout:
+            if self._eof:
+                return None
+            raise TimeoutError(f"no fake output within {timeout}s")
+        return self._stdout.popleft()
 
 
 def _accept(command_name: str) -> Callable[[dict[str, object]], dict[str, object]]:
@@ -99,8 +111,16 @@ def test_unrelated_session_events_are_skipped_while_awaiting_a_response() -> Non
 
 
 def test_stream_closing_mid_wait_raises() -> None:
-    transport = FakeTransport(lambda _command: None)  # never enqueues a response
+    transport = FakeTransport(lambda _command: None, eof=True)  # never enqueues a response
     rpc = PiRpc(transport)
 
     with pytest.raises(PiProtocolError, match="closed"):
+        rpc.prompt("hi")
+
+
+def test_no_response_within_the_configured_timeout_raises() -> None:
+    transport = FakeTransport(lambda _command: None)  # stalls forever, never closes
+    rpc = PiRpc(transport, response_timeout_s=0.01)
+
+    with pytest.raises(PiProtocolError, match="no response"):
         rpc.prompt("hi")

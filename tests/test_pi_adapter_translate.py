@@ -90,6 +90,44 @@ def test_propose_verdict_translates() -> None:
     )
 
 
+def test_propose_verdict_rejects_a_non_string_note() -> None:
+    call = RelayCall(
+        tool_name="propose_verdict",
+        input={"finding_id": "f1", "verdict_type": "confirmed", "note": 123},
+    )
+    with pytest.raises(MalformedRelayCallError):
+        action_from_relay(call, vertical="auth")
+
+
+def test_propose_verdict_rejects_a_non_string_requirements() -> None:
+    call = RelayCall(
+        tool_name="propose_verdict",
+        input={
+            "finding_id": "f1",
+            "verdict_type": "needs_confirmation",
+            "requirements": {"not": "a string"},
+        },
+    )
+    with pytest.raises(MalformedRelayCallError):
+        action_from_relay(call, vertical="auth")
+
+
+def test_propose_verdict_accepts_a_valid_note_and_requirements() -> None:
+    call = RelayCall(
+        tool_name="propose_verdict",
+        input={
+            "finding_id": "f1",
+            "verdict_type": "needs_confirmation",
+            "note": "still checking",
+            "requirements": "confirm with a second scan",
+        },
+    )
+    action = action_from_relay(call, vertical="auth")
+    assert isinstance(action, ProposeVerdict)
+    assert action.verdict.note == "still checking"
+    assert action.verdict.requirements == "confirm with a second scan"
+
+
 def test_propose_verdict_does_not_require_a_vertical_field() -> None:
     # ProposeVerdict has no vertical attribute; translation still succeeds
     # with the Harness's active vertical supplied, it's just unused.

@@ -13,11 +13,14 @@ notes).
 """
 
 import json
+import select
 import subprocess
 from collections.abc import Mapping
 from typing import Any, Protocol, cast
 
 from exhaust.harness.pi_adapter.errors import PiProtocolError
+
+DEFAULT_RESPONSE_TIMEOUT_S = 30.0
 
 
 class PiCommands(Protocol):
@@ -48,8 +51,11 @@ class RpcTransport(Protocol):
         """Write one line (no trailing newline) to the subprocess's stdin."""
         ...
 
-    def read_line(self) -> str | None:
-        """Block for the next line of the subprocess's stdout, or `None` on EOF."""
+    def read_line(self, *, timeout: float) -> str | None:
+        """Block up to `timeout` seconds for the next stdout line, or `None` on EOF.
+
+        Raises `TimeoutError` if no line arrives within `timeout`.
+        """
         ...
 
 
@@ -72,10 +78,23 @@ class SubprocessRpcTransport:
         self._process.stdin.write(line + "\n")
         self._process.stdin.flush()
 
-    def read_line(self) -> str | None:
-        """Read one line from the subprocess's stdout, or `None` at EOF."""
+    def read_line(self, *, timeout: float) -> str | None:
+        """Read one line from the subprocess's stdout, bounded by `timeout`.
+
+        Raises
+        ------
+        TimeoutError
+            If no line is available within `timeout` seconds. Pi's own
+            buffered output could in principle hold more after this
+            returns, but the subprocess is spawned line-buffered
+            (`bufsize=1`) specifically so a complete RPC record is never
+            left sitting unflushed on Pi's side of the pipe.
+        """
         if self._process.stdout is None:
             raise PiProtocolError("subprocess has no stdout pipe")
+        ready, _, _ = select.select([self._process.stdout], [], [], timeout)
+        if not ready:
+            raise TimeoutError(f"no RPC output within {timeout}s")
         line = self._process.stdout.readline()
         return None if line == "" else line.rstrip("\n")
 
@@ -89,8 +108,11 @@ class PiRpc:
     carries the authoritative content for every action.
     """
 
-    def __init__(self, transport: RpcTransport) -> None:
+    def __init__(
+        self, transport: RpcTransport, *, response_timeout_s: float = DEFAULT_RESPONSE_TIMEOUT_S
+    ) -> None:
         self._transport = transport
+        self._response_timeout_s = response_timeout_s
         self._next_id = 0
 
     def _fresh_id(self) -> str:
@@ -101,21 +123,26 @@ class PiRpc:
         request_id = self._fresh_id()
         self._transport.write_line(json.dumps({**command, "id": request_id}))
 
-        while True:
-            line = self._transport.read_line()
-            if line is None:
-                raise PiProtocolError("Pi's RPC stream closed while awaiting a response")
+        try:
+            while True:
+                line = self._transport.read_line(timeout=self._response_timeout_s)
+                if line is None:
+                    raise PiProtocolError("Pi's RPC stream closed while awaiting a response")
 
-            try:
-                parsed = json.loads(line)
-            except json.JSONDecodeError as exc:
-                raise PiProtocolError(f"malformed RPC record: {line!r}") from exc
+                try:
+                    parsed = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    raise PiProtocolError(f"malformed RPC record: {line!r}") from exc
 
-            if not isinstance(parsed, dict):
-                raise PiProtocolError(f"RPC record is not an object: {line!r}")
-            record = cast("dict[str, Any]", parsed)
-            if record.get("type") == "response" and record.get("id") == request_id:
-                return record
+                if not isinstance(parsed, dict):
+                    raise PiProtocolError(f"RPC record is not an object: {line!r}")
+                record = cast("dict[str, Any]", parsed)
+                if record.get("type") == "response" and record.get("id") == request_id:
+                    return record
+        except TimeoutError as exc:
+            raise PiProtocolError(
+                f"no response to {command.get('type')!r} within {self._response_timeout_s}s"
+            ) from exc
 
     def prompt(self, text: str, *, streaming_behavior: str | None = None) -> None:
         """Send `text` as the active session's next prompt.
@@ -133,8 +160,9 @@ class PiRpc:
         Raises
         ------
         PiProtocolError
-            If Pi rejects the prompt (`success: false`) or the stream
-            closes before answering.
+            If Pi rejects the prompt (`success: false`), the stream
+            closes before answering, or no response arrives within this
+            `PiRpc`'s configured response timeout.
         """
         command: dict[str, Any] = {"type": "prompt", "message": text}
         if streaming_behavior is not None:
@@ -149,8 +177,9 @@ class PiRpc:
         Raises
         ------
         PiProtocolError
-            If Pi rejects the command or the stream closes before
-            answering.
+            If Pi rejects the command, the stream closes before
+            answering, or no response arrives within this `PiRpc`'s
+            configured response timeout.
         """
         response = self._send_and_await({"type": "new_session"})
         if not response.get("success"):

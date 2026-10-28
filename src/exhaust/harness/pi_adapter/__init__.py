@@ -3,6 +3,7 @@
 from exhaust.harness.pi_adapter.errors import (
     AgentWentSilentError,
     GateNotLoadedError,
+    HandshakeSkippedError,
     MalformedRelayCallError,
     PiProtocolError,
 )
@@ -11,6 +12,7 @@ from exhaust.harness.pi_adapter.session import PiAgentSession, PiLaunchConfig
 __all__ = [
     "AgentWentSilentError",
     "GateNotLoadedError",
+    "HandshakeSkippedError",
     "MalformedRelayCallError",
     "PiAgentSession",
     "PiLaunchConfig",

@@ -57,6 +57,21 @@ def _str(input_: Mapping[str, Any], key: str) -> str:
     return value
 
 
+def _str_with_default(input_: Mapping[str, Any], key: str, default: str) -> str:
+    if key not in input_:
+        return default
+    return _str(input_, key)
+
+
+def _optional_str(input_: Mapping[str, Any], key: str) -> str | None:
+    value = input_.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise MalformedRelayCallError(f"{key!r} must be a string or absent")
+    return value
+
+
 def _mapping(input_: Mapping[str, Any], key: str) -> Mapping[str, Any]:
     value = input_.get(key)
     if not isinstance(value, Mapping):
@@ -124,8 +139,8 @@ def _propose_verdict(call: RelayCall, *, vertical: str) -> ProposeVerdict:  # no
     try:
         verdict = Verdict(
             type=verdict_type,
-            note=call.input.get("note", ""),
-            requirements=call.input.get("requirements"),
+            note=_str_with_default(call.input, "note", ""),
+            requirements=_optional_str(call.input, "requirements"),
             supporting_evidence=_str_tuple(call.input, "supporting_evidence"),
             contradicting_evidence=_str_tuple(call.input, "contradicting_evidence"),
         )

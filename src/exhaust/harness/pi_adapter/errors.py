@@ -4,11 +4,27 @@
 class GateNotLoadedError(RuntimeError):
     """Pi's gate extension didn't prove itself loaded before a turn needed it.
 
-    Raised by `PiAgentSession.launch`/`_begin_vertical` when the handshake
-    tool call doesn't arrive within the configured timeout. Never assumed
-    from an earlier session's success: Pi doesn't load extensions into a
-    freshly started session by default, so every session gets its own
-    check (the `pi-schedule-prompt` finding this guards against).
+    Raised by `PiAgentSession._begin_vertical` when nothing is relayed
+    within the handshake timeout at all — no evidence the extension ever
+    loaded. Never assumed from an earlier session's success: Pi doesn't
+    load extensions into a freshly started session by default, so every
+    session gets its own check (the `pi-schedule-prompt` finding this
+    guards against). Distinct from `HandshakeSkippedError`, which is a
+    different diagnosis for a different observation.
+    """
+
+
+class HandshakeSkippedError(RuntimeError):
+    """A relay call arrived during handshake, but not the handshake tool itself.
+
+    Raised instead of `GateNotLoadedError` when `_begin_vertical` receives
+    a real tool call before the handshake: that call only reaches this
+    adapter by actually traveling from the Pi subprocess through the
+    loaded gate extension over the relay socket, which is proof the gate
+    loaded. The failure here is the model not following the opening
+    prompt's instruction to call the handshake tool first, a prompting
+    problem, not an infrastructure one — worth a different error so an
+    operator doesn't chase the wrong cause.
     """
 
 

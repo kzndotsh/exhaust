@@ -18,6 +18,7 @@ from exhaust.harness.agent import AgentTurnRequest
 from exhaust.harness.pi_adapter.errors import (
     AgentWentSilentError,
     GateNotLoadedError,
+    HandshakeSkippedError,
     MalformedRelayCallError,
     PiProtocolError,
 )
@@ -41,7 +42,12 @@ class PiLaunchConfig:
     Attributes
     ----------
     pi_executable : Path
-        The `pi` binary, started as `pi --mode rpc --no-session --extensions <gate_extension_dir>`.
+        The `pi` binary, started as `pi --mode rpc --no-session
+        --no-builtin-tools --extensions <gate_extension_dir>`.
+        `--no-builtin-tools` is the host-enforced half of the gate: Pi's
+        own built-in tools (`bash`, `edit`, `write`, ...) never exist in
+        this subprocess at all, so the extension's `tool_call` allowlist
+        hook is defense-in-depth on top of that, never the sole boundary.
     provider : str
         Passed to Pi's own `--provider` flag (accepts a bare provider id
         or `provider/id`, per Pi's CLI reference).
@@ -56,13 +62,21 @@ class PiLaunchConfig:
         `pi-schedule-prompt` finding ADR 0025 names).
     handshake_timeout_s : float
         How long to wait for the handshake tool call on a freshly started
-        session before refusing to run (`GateNotLoadedError`).
+        session before refusing to run (`GateNotLoadedError`), and the
+        same bound `accept_once` gives a connection, once accepted, to
+        actually send its call.
     turn_poll_timeout_s : float
         How long `step()` waits for a relayed tool call before concluding
-        the turn has settled idle and sending a follow-up nudge.
+        the turn has settled idle and sending a follow-up nudge. Also
+        used as the RPC command/response timeout (`PiRpc`'s
+        `response_timeout_s`): both bound how long this adapter waits on
+        the Pi subprocess before treating it as stuck.
     settle_reprompts : int
         How many nudges `step()` sends before raising
         `AgentWentSilentError`.
+    process_teardown_timeout_s : float
+        How long `launch()`'s teardown waits for the subprocess to exit
+        after `terminate()` before escalating to `kill()`.
     """
 
     pi_executable: Path
@@ -72,6 +86,7 @@ class PiLaunchConfig:
     handshake_timeout_s: float = 10.0
     turn_poll_timeout_s: float = 30.0
     settle_reprompts: int = 2
+    process_teardown_timeout_s: float = 5.0
 
 
 def _compose_opening_prompt(request: AgentTurnRequest) -> str:
@@ -134,6 +149,7 @@ class PiAgentSession:
                 "--mode",
                 "rpc",
                 "--no-session",
+                "--no-builtin-tools",
                 "--provider",
                 cfg.provider,
                 "--extensions",
@@ -142,13 +158,19 @@ class PiAgentSession:
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             text=True,
+            bufsize=1,
             env=env,
         )
         try:
-            yield cls(PiRpc(SubprocessRpcTransport(process)), relay, cfg)
+            rpc = PiRpc(SubprocessRpcTransport(process), response_timeout_s=cfg.turn_poll_timeout_s)
+            yield cls(rpc, relay, cfg)
         finally:
             process.terminate()
-            process.wait()
+            try:
+                process.wait(timeout=cfg.process_teardown_timeout_s)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
             relay.close()
 
     def step(self, request: AgentTurnRequest) -> AgentAction:
@@ -167,8 +189,12 @@ class PiAgentSession:
         Raises
         ------
         GateNotLoadedError
-            If `request.vertical` is new to this session and the gate
-            extension doesn't announce itself in time.
+            If `request.vertical` is new to this session and nothing is
+            relayed within the handshake timeout at all.
+        HandshakeSkippedError
+            If `request.vertical` is new to this session and a relayed
+            call arrives, but not the handshake tool — the gate loaded,
+            but the model didn't call it first.
         AgentWentSilentError
             If the turn settles with no relayable call after every
             configured re-prompt.
@@ -196,19 +222,44 @@ class PiAgentSession:
         pending.respond(outcome_to_wire(outcome))
 
     def _begin_vertical(self, request: AgentTurnRequest) -> None:
+        """Open a fresh Pi session for `request.vertical` and verify its gate.
+
+        `self._active_vertical` is set only once the handshake actually
+        succeeds, at the very end — not before. Setting it earlier would
+        mean a retried `step()` call after a failed handshake sees
+        `request.vertical.name == self._active_vertical` already true and
+        skips this method entirely on the next attempt, silently reusing
+        a session that was never actually verified.
+
+        Raises
+        ------
+        GateNotLoadedError
+            If nothing is relayed within `handshake_timeout_s` at all —
+            no evidence the gate extension loaded.
+        HandshakeSkippedError
+            If a relayed call arrives but it isn't the handshake tool:
+            proof the gate loaded, since the call only reaches this
+            adapter by actually traveling through it, but proof the model
+            didn't follow the opening prompt's instruction to call it
+            first.
+        """
         self._rpc.new_session()
-        self._active_vertical = request.vertical.name
         self._rpc.prompt(_compose_opening_prompt(request))
 
         handshake = self._relay.accept_once(timeout=self._cfg.handshake_timeout_s)
-        if handshake is None or handshake.tool_name != HANDSHAKE_TOOL_NAME:
-            if handshake is not None:
-                handshake.respond({"ok": False, "output": "expected the handshake tool first"})
+        if handshake is None:
             raise GateNotLoadedError(
                 f"{request.vertical.name}: gate extension didn't announce itself within "
                 f"{self._cfg.handshake_timeout_s}s"
             )
+        if handshake.tool_name != HANDSHAKE_TOOL_NAME:
+            handshake.respond({"ok": False, "output": "expected the handshake tool first"})
+            raise HandshakeSkippedError(
+                f"{request.vertical.name}: expected the handshake tool first, got "
+                f"{handshake.tool_name!r} — the gate is loaded, but the model skipped it"
+            )
         handshake.respond({"ok": True, "output": ""})
+        self._active_vertical = request.vertical.name
 
     def _await_next_action(self) -> AgentAction:
         if self._active_vertical is None:

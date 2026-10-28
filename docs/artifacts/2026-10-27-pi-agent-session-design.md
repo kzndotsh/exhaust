@@ -386,11 +386,40 @@ wrong, caught before they became bugs:
   cannot accept anywhere near an authorization decision: a hung decision-channel silently defaulting
   to "allow" is exactly the failure ADR 0023 exists to rule out. The relay instead runs over a
   dedicated Unix domain socket (`relay.py`, `UnixSocketRelayChannel`) that this adapter owns
-  outright, with its own explicit timeout semantics (never auto-allow on timeout) rather than
-  inheriting Pi's. The gate handshake is now a seventh registered tool (`exhaust_handshake`) the
-  opening prompt explicitly instructs the model to call first, rather than an `onSessionStart`
-  hook calling `ctx.ui.request(...)` (which also doesn't exist) — proven, not assumed, by
-  `PiAgentSession._begin_vertical`'s unit tests.
+  outright, never auto-allowing on timeout — but a code-review pass after the first implementation
+  found the first cut of this only half-delivered that: `accept_once`'s `timeout` bounded waiting
+  for a new connection, not reading the call off one already accepted, so a peer that connected
+  and then stalled hung indefinitely despite the configured timeout. Fixed by applying the same
+  `timeout` to the accepted connection's own read (`connection.settimeout(timeout)`), proven by
+  `tests/test_pi_adapter_relay.py::test_a_connection_accepted_but_never_sending_data_times_out`,
+  which connects and deliberately sends nothing. The RPC command channel (`rpc.py`) had the
+  identical gap — no timeout at all on the subprocess's stdout read — fixed the same way via
+  `select.select` with a configurable `response_timeout_s`. The gate handshake is now a seventh
+  registered tool (`exhaust_handshake`) the opening prompt explicitly instructs the model to call
+  first, rather than an `onSessionStart` hook calling `ctx.ui.request(...)` (which also doesn't
+  exist) — proven, not assumed, by `PiAgentSession._begin_vertical`'s unit tests. Those same tests
+  caught a second real bug: `_active_vertical` was being set before the handshake was confirmed,
+  so a retried `step()` after a failed handshake silently skipped re-verification; fixed by only
+  setting it once the handshake actually succeeds, proven by
+  `test_retrying_step_after_a_failed_handshake_re_runs_begin_vertical`. A relayed call arriving
+  before the handshake tool is now also diagnosed as its own `HandshakeSkippedError`, distinct from
+  `GateNotLoadedError`: the call only reaches this adapter by actually traveling through the loaded
+  extension, which is proof the gate loaded, so the two causes (infra failure vs. a model skipping
+  an instruction) no longer collapse into one indistinguishable error.
+
+  The same pass also found `UnixSocketRelayChannel.close()` only closed the listening socket, never
+  a connection that was accepted but never answered (e.g. if an exception elsewhere left it
+  unanswered) — now `close()` tracks and closes every such connection, proven by
+  `test_close_cleans_up_a_connection_accepted_but_never_answered`. What that fix doesn't reach: an
+  exception escaping `Harness._dispatch`'s own narrow `except` clauses during normal operation still
+  leaves one connection unanswered until the next `close()`, since that dispatch code lives outside
+  this package. Left as a known limitation, not fixed here.
+
+  Finally, `_propose_verdict` validated every field except `note` and `requirements`, which went
+  straight from the wire into a `Verdict` with no type check, unlike every sibling field. Fixed with
+  the same `_str`-shaped helpers the rest of the module already uses
+  (`_str_with_default`/`_optional_str`), proven by
+  `test_propose_verdict_rejects_a_non_string_note`/`_requirements`.
 
 One assumption was independently confirmed correct: **`new_session` is a real, documented
 top-level RPC command** (`{"type": "new_session"}`, `docs/rpc-commands.md`), so the primary
@@ -399,7 +428,7 @@ fully-specified per-vertical-subprocess alternative in this doc's history was ne
 
 Implemented: `src/exhaust/harness/pi_adapter/` (`errors.py`, `translate.py`, `schema.py`, `rpc.py`,
 `relay.py`, `session.py`, `gate/extension.ts`), with full test coverage for every pure-Python path
-and the real Unix-socket implementation (`tests/test_pi_adapter_*.py`, 40 tests), and the gate
+and the real Unix-socket implementation (`tests/test_pi_adapter_*.py`, 48 tests), and the gate
 extension's TypeScript independently checked clean (`tsc --noEmit`, zero errors) against the real
 installed package and `typebox` type definitions. **Not yet verified: an actual end-to-end run
 against a live `pi` subprocess with real model credentials** — everything above is proven against
@@ -422,12 +451,16 @@ next real risk before trusting this in production.
 - **Where exactly does `PiLaunchConfig.provider_base_url` get plumbed** — a Pi provider config
   file, a CLI flag, an env var — once ADR 0021's proxy actually exists? Still a named stub; not
   plumbed by this implementation.
-- **The exact `--tools` flag syntax for disabling Pi's built-in tools entirely** (so only the seven
-  relay tools exist) wasn't confirmed against a live run; `cli.md` documents the flag's existence
-  and general shape but not a verified "disable everything" invocation. The design doesn't depend
-  on getting this right, by choice: the `tool_call` hook's allowlist check blocks anything that
-  isn't one of the seven relay tools regardless of what `--tools` does, so correctness doesn't rest
-  on this flag being spelled correctly.
+- **Resolved**: a code-review pass flagged that the first implementation relied entirely on the
+  `tool_call` allowlist hook — an in-Pi-process check — to keep built-in tools from running, with
+  no host-enforced restriction at spawn, in tension with ADR 0018's "the bridge enforces, not
+  merely advertises" standard. `cli.md` documents the exact flag needed: `-nbt`/`--no-builtin-tools`
+  ("Disables default built-in tools while retaining extension and custom tools"), confirmed from
+  the real installed package's docs, not guessed. `launch()` now passes it at spawn
+  (`tests/test_pi_adapter_session.py::test_launch_spawns_pi_with_builtin_tools_disabled`), so the
+  `tool_call` hook is genuine defense-in-depth on top of a host-enforced restriction, not the sole
+  boundary. Still unverified: an actual live run confirming `--no-builtin-tools` behaves as
+  documented in practice.
 
 ## Next implementation step
 

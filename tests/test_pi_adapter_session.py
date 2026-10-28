@@ -6,7 +6,11 @@ import pytest
 from exhaust.catalog import VerticalEntry
 from exhaust.harness.actions import ActionRejected, SandboxCall
 from exhaust.harness.agent import AgentTurnRequest
-from exhaust.harness.pi_adapter.errors import AgentWentSilentError, GateNotLoadedError
+from exhaust.harness.pi_adapter.errors import (
+    AgentWentSilentError,
+    GateNotLoadedError,
+    HandshakeSkippedError,
+)
 from exhaust.harness.pi_adapter.relay import PendingRelayCall
 from exhaust.harness.pi_adapter.schema import HANDSHAKE_TOOL_NAME
 from exhaust.harness.pi_adapter.session import PiAgentSession, PiLaunchConfig
@@ -91,14 +95,35 @@ def test_step_raises_gate_not_loaded_when_handshake_never_arrives() -> None:
         session.step(_request())
 
 
-def test_step_raises_gate_not_loaded_when_a_real_call_arrives_before_the_handshake() -> None:
+def test_step_raises_handshake_skipped_when_a_real_call_arrives_before_the_handshake() -> None:
+    # Distinct from GateNotLoadedError: a call arriving at all proves the gate loaded,
+    # so this is diagnosed as the model skipping the handshake, not an infra failure.
     impersonator = FakePendingCall("sandbox_call", {"tool": "x", "method": "y", "params": {}})
     relay = FakeRelay([impersonator])
     session = PiAgentSession(FakeRpc(), relay, _cfg())
 
-    with pytest.raises(GateNotLoadedError):
+    with pytest.raises(HandshakeSkippedError):
         session.step(_request())
     assert impersonator.responses == [{"ok": False, "output": "expected the handshake tool first"}]
+
+
+def test_retrying_step_after_a_failed_handshake_re_runs_begin_vertical() -> None:
+    # Regression: _active_vertical must only be set once the handshake succeeds,
+    # or this retry would skip _begin_vertical entirely on the second call and
+    # silently reuse a session that was never actually verified (rpc.new_sessions
+    # would stay at 1 instead of advancing to 2).
+    handshake = FakePendingCall(HANDSHAKE_TOOL_NAME, {})
+    real_call = FakePendingCall("set_vertical_state", {"reason": "ok"})
+    relay = FakeRelay([None, handshake, real_call])  # first attempt times out, second succeeds
+    rpc = FakeRpc()
+    session = PiAgentSession(rpc, relay, _cfg())
+
+    with pytest.raises(GateNotLoadedError):
+        session.step(_request())
+
+    session.step(_request())  # retried: must re-run _begin_vertical, not skip it
+
+    assert rpc.new_sessions == 2
 
 
 def test_switching_vertical_opens_a_fresh_session() -> None:
@@ -179,3 +204,35 @@ def test_turn_going_silent_past_every_reprompt_raises() -> None:
 
     with pytest.raises(AgentWentSilentError):
         session.step(_request())
+
+
+def test_launch_spawns_pi_with_builtin_tools_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Regression: the gate extension's tool_call allowlist must not be the
+    # *only* thing stopping a built-in tool from running — --no-builtin-tools
+    # removes them at spawn, so the allowlist hook is defense-in-depth, not
+    # the sole boundary.
+    captured_argv: list[str] = []
+
+    class FakeProcess:
+        stdin = None
+        stdout = None
+
+        def terminate(self) -> None:
+            pass
+
+        def wait(self, timeout: float | None = None) -> None:
+            pass
+
+    def fake_popen(argv: list[str], **_kwargs: object) -> FakeProcess:
+        captured_argv.extend(argv)
+        return FakeProcess()
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+    cfg = _cfg(pi_executable=Path("/usr/local/bin/pi"))
+    with PiAgentSession.launch(cfg, socket_path=tmp_path / "relay.sock"):
+        pass
+
+    assert "--no-builtin-tools" in captured_argv
