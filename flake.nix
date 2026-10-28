@@ -1,5 +1,5 @@
 {
-  description = "exhaust dev shell: uv, just, and the Rig's pinned tools (nmap)";
+  description = "exhaust dev shell: uv, just, and the Rig's pinned tools";
 
   inputs = {
     # Pinned to the exact commit NixHub indexes for nmap 7.991 (src/exhaust/rig/catalog.py's
@@ -30,8 +30,9 @@
 
           shellHook = ''
             export UV_PROJECT_ENVIRONMENT="$PWD/.venv"
-            echo "exhaust dev shell — $(uv --version), $(nmap --version | head -1)"
+            echo "exhaust dev shell — $(uv --version)"
             echo "  uv sync --group dev && uv run lefthook install"
+            echo "  uv run exhaust doctor   # check the Rig's pinned tools are on PATH"
             echo "  just check"
             echo "  uv run exhaust run <target> --model <model>"
           '';
