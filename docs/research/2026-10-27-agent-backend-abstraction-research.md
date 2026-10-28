@@ -1,5 +1,12 @@
 # Research: how a harness actually invokes an agent/LLM
 
+**Superseded for the decision itself**: [ADR 0025](../adr/0025-agentsession-is-backed-by-pi-gated-by-a-thin-relay-extension.md)
+settled `AgentSession`'s first implementation on the vendor-agent-SDK row of this
+document's own comparison table (Pi, specifically) — see
+[`2026-10-27-pi-harness-audit.md`](2026-10-27-pi-harness-audit.md) for the dedicated research
+that led there. This document's comparative survey of the other approaches remains accurate and
+useful if that decision is ever revisited, which is why it's kept rather than deleted.
+
 Input to a future ADR on `AgentSession` (src/exhaust/harness/agent.py), not a recommendation.
 exhaust's `Harness` drives one `AgentSession` through typed `step(request) -> AgentAction` /
 `observe(outcome)` calls; `AgentAction` is a closed union (`SandboxCall`, `RealTargetCall`,

@@ -47,6 +47,7 @@ uv run exhaust catalog check
 - **The Rig wraps pinned external tools behind one call gate.** A method not on a tool's own closed list is refused before the tool ever runs ([ADR 0012](docs/adr/0012-rig-wraps-a-pinned-tool-catalog.md), [ADR 0018](docs/adr/0018-tool-bridges-expose-a-narrow-enumerated-surface.md)). No tools are pinned yet. [`src/exhaust/rig/`](src/exhaust/rig/)
 - **The Harness is the one chokepoint between an agent's proposed actions and the privileged domain calls they trigger** ([ADR 0001](docs/adr/0001-agent-first-design.md), [ADR 0007](docs/adr/0007-verdicts-are-recorded-through-typed-tools.md)). Every `AgentAction` variant is wired up end to end: `SandboxCall` and `RealTargetCall` dispatch through the Rig, re-checking the Scope Contract for the latter; `SelfReport`'s exhaustion claims are checked against the Findings store and the attempt log, not taken on trust. [`src/exhaust/harness/`](src/exhaust/harness/)
 - **A consequential real-Target action or an exhaustion claim waits for a human, not just a scope check** ([ADR 0023](docs/adr/0023-consequential-real-target-actions-wait-for-a-human.md)). A Rig bridge marks its own methods consequential; a matching call is held as a pending approval, independent of the ledger's `blocked` state, until a human resolves it — and approving doesn't execute it, the agent has to propose it again. [`src/exhaust/approvals.py`](src/exhaust/approvals.py)
+- **`AgentSession`'s first implementation is backed by Pi, gated by a thin extension that relays every decision to the Harness** ([ADR 0025](docs/adr/0025-agentsession-is-backed-by-pi-gated-by-a-thin-relay-extension.md)). Pi's model loop runs as a subprocess; the one piece of TypeScript this introduces forwards a proposed tool call to the Harness over a Unix socket and decides nothing itself — every actual dispatch, scope check, and approval still happens in the same Python code every other backend would use. Not yet run end to end against a live model. [`src/exhaust/harness/pi_adapter/`](src/exhaust/harness/pi_adapter/)
 
 ## Project layout
 
@@ -65,9 +66,10 @@ src/exhaust/
 ├── approvals.py         # Pending human approvals for consequential actions (ADR 0023)
 ├── rig/                 # Pinned external tool catalog + the one call gate (ADR 0012, 0018)
 └── harness/             # Orchestrator; composes every domain module (ADR 0001, 0005, 0007)
+    └── pi_adapter/      # AgentSession backed by Pi; the one TypeScript file lives here (ADR 0025)
 ```
 
-Lint, format, strict types, numpy docstrings, import boundaries, and tests all run the same way locally and in CI — see the [justfile](justfile) (`just check`) and [lefthook.yml](lefthook.yml).
+Lint, format, strict types, numpy docstrings, import boundaries, and tests all run the same way locally and in CI — see the [justfile](justfile) (`just check`) and [lefthook.yml](lefthook.yml). The one exception is `harness/pi_adapter/gate/extension.ts`, the single TypeScript file in the tree: it's checked with `tsc --noEmit` against the real `@earendil-works/pi-coding-agent` types by hand, not wired into `just check` or CI yet.
 
 ## Design docs
 
@@ -75,7 +77,8 @@ The design is ahead of the code. Start here if you want the reasoning, not just 
 
 - **[GLOSSARY.md](GLOSSARY.md)** — the vocabulary: Target, Workspace, Sandbox, Rig, Scope Contract, Brief, Finding, Verdict, Oracle, Playbook, Vertical, Harness, Disclosure.
 - **[docs/adr/](docs/adr/)** — 25 architecture decision records, each a specific, evidenced call: how findings are verified, how the Playbook is shaped, the safety boundaries around testing a real Target, when a consequential action waits for a human, what extent of testing a Scope Contract actually authorizes, what backs the agent's own conversation loop.
-- **[docs/research/](docs/research/)** — 27 audits of comparable tools (security-research harnesses, pentest platforms, skill libraries), plus dedicated audits of the agent-backend landscape, harness-engineering principles, LiteLLM, and the Pi coding-agent toolkit, each stating plainly what exhaust adopted, rejected, and why. Most of the ADRs are built on these.
+- **[docs/research/](docs/research/)** — 25 audits of comparable tools (security-research harnesses, pentest platforms, skill libraries), plus dedicated audits of the agent-backend landscape, harness-engineering principles, LiteLLM, and the Pi coding-agent toolkit, each stating plainly what exhaust adopted, rejected, and why. Most of the ADRs are built on these.
+- **[docs/artifacts/](docs/artifacts/)** — working design material that isn't a settled ADR or a finished tool audit: the still-open Playbook vertical-catalog proposal, and the architect-synthesized `PiAgentSession` design sketch (with its own reconciliation log of what changed once a code-review pass and a real-package verification spike checked it against reality).
 
 ## Responsible use
 
