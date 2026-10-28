@@ -37,7 +37,7 @@ from exhaust.harness.pi_adapter import (
     PiLaunchConfig,
     PiProtocolError,
 )
-from exhaust.rig import NmapBridge, ToolBridge
+from exhaust.rig import default_bridges
 
 app = typer.Typer()
 
@@ -102,7 +102,7 @@ def run(
         )
         raise typer.Exit(code=1)
 
-    bridges: dict[str, ToolBridge] = {"nmap": NmapBridge()}
+    bridges = default_bridges()
     socket_path = Path(f"/tmp/exhaust-pi-{uuid.uuid4().hex[:12]}.sock")
 
     with contextlib.ExitStack() as stack:

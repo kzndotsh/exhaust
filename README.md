@@ -66,6 +66,7 @@ src/exhaust/
 ├── attempts.py          # Per-vertical tool-attempt log, backs SelfReport checks (ADR 0005)
 ├── approvals.py         # Pending human approvals for consequential actions (ADR 0023)
 ├── rig/                 # Pinned external tool catalog + the one call gate (ADR 0012, 0018, 0026)
+│   └── wrappers/        # One ToolBridge per tool; default_bridges() is the registry
 └── harness/             # Orchestrator; composes every domain module (ADR 0001, 0005, 0007)
     ├── credential_proxy.py  # Local budget-capped proxy; agent never holds the real key (ADR 0021)
     └── pi_adapter/      # AgentSession backed by Pi; the one TypeScript file lives here (ADR 0025)

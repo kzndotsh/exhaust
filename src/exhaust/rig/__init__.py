@@ -12,7 +12,7 @@ from exhaust.rig.bridges import (
     tools,
 )
 from exhaust.rig.catalog import PINNED_TOOLS, PinnedTool
-from exhaust.rig.nmap import NmapBridge
+from exhaust.rig.wrappers import NmapBridge, default_bridges
 
 __all__ = [
     "PINNED_TOOLS",
@@ -25,6 +25,7 @@ __all__ = [
     "UnknownMethodError",
     "UnknownToolError",
     "call",
+    "default_bridges",
     "method_info",
     "tools",
 ]

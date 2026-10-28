@@ -2,7 +2,8 @@ import stat
 from pathlib import Path
 
 from exhaust.rig.bridges import call
-from exhaust.rig.nmap import NmapBridge
+from exhaust.rig.wrappers import default_bridges
+from exhaust.rig.wrappers.nmap import NmapBridge
 
 _FAKE_NMAP = """\
 #!/usr/bin/env python3
@@ -101,3 +102,9 @@ def test_goes_through_the_rig_call_gate_like_any_other_bridge(tmp_path: Path) ->
     bridge = NmapBridge(executable=_fake_nmap(tmp_path))
     result = call({"nmap": bridge}, "nmap", "tcp_connect_scan", host="scanme.example")
     assert result.ok is True
+
+
+def test_default_bridges_includes_nmap() -> None:
+    bridges = default_bridges()
+    assert set(bridges) == {"nmap"}
+    assert isinstance(bridges["nmap"], NmapBridge)
