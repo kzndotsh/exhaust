@@ -116,6 +116,17 @@ class ToolBridge(Protocol):
         """Invoke `method` on the underlying tool with `params`."""
         ...
 
+    def installed_version(self) -> str | None:
+        """Report the actually-installed tool's version, or `None` if it can't be determined.
+
+        For `rig.preflight.check_pinned_tools` to compare against
+        `PinnedTool.version` (ADR 0012): a bridge wraps one specific
+        external tool, so it already knows that tool's own
+        `--version`-shaped invocation and output format — this module's
+        gate doesn't, and has no business guessing at either.
+        """
+        ...
+
 
 class UnknownToolError(ValueError):
     """Raised when `call` or `tools` is given a tool name with no bridge."""

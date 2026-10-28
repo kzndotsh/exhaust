@@ -43,8 +43,10 @@ _METHODS = (
 # outside the characters a hostname, IPv4, or IPv6 address can actually contain.
 _HOST_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9.\-:]*")
 _PORTS_PATTERN = re.compile(r"[0-9]+(-[0-9]+)?(,[0-9]+(-[0-9]+)?)*")
+_VERSION_PATTERN = re.compile(r"Nmap version (\S+)")
 
 _SCAN_TIMEOUT_S = 120.0
+_VERSION_TIMEOUT_S = 10.0
 
 
 @dataclass(frozen=True)
@@ -99,3 +101,27 @@ class NmapBridge:
             return ToolResult(ok=False, output=f"nmap: invocation failed: {exc}")
 
         return ToolResult(ok=completed.returncode == 0, output=completed.stdout or completed.stderr)
+
+    def installed_version(self) -> str | None:
+        """Parse the real version out of `nmap --version`'s first line.
+
+        Returns
+        -------
+        str | None
+            The installed version (e.g. `"7.991"`), or `None` if the
+            binary can't be run at all, or its output doesn't match the
+            expected `"Nmap version <x>"` shape.
+        """
+        try:
+            completed = subprocess.run(
+                [str(self.executable), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=_VERSION_TIMEOUT_S,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+
+        match = _VERSION_PATTERN.search(completed.stdout)
+        return match.group(1) if match else None

@@ -31,6 +31,9 @@ class FakeScanner:
         self.calls.append((method, params))
         return ToolResult(ok=True, output=f"ran {method} with {params}")
 
+    def installed_version(self) -> str | None:
+        return "1.0.0"
+
 
 def test_tools_lists_discovery_info_not_methods() -> None:
     bridges = {"fake-scanner": FakeScanner()}

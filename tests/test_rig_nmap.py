@@ -108,3 +108,29 @@ def test_default_bridges_includes_nmap() -> None:
     bridges = default_bridges()
     assert set(bridges) == {"nmap"}
     assert isinstance(bridges["nmap"], NmapBridge)
+
+
+def test_installed_version_parses_the_real_nmap_version_line(tmp_path: Path) -> None:
+    script = tmp_path / "fake-nmap"
+    script.write_text(
+        "#!/bin/sh\necho 'Nmap version 7.991 ( https://nmap.org )'\n"
+        "echo 'Platform: x86_64-pc-linux-gnu'\n"
+    )
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+
+    bridge = NmapBridge(executable=script)
+    assert bridge.installed_version() == "7.991"
+
+
+def test_installed_version_is_none_when_the_binary_does_not_exist(tmp_path: Path) -> None:
+    bridge = NmapBridge(executable=tmp_path / "no-such-binary")
+    assert bridge.installed_version() is None
+
+
+def test_installed_version_is_none_on_unrecognized_output(tmp_path: Path) -> None:
+    script = tmp_path / "fake-nmap"
+    script.write_text("#!/bin/sh\necho 'not nmap at all'\n")
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+
+    bridge = NmapBridge(executable=script)
+    assert bridge.installed_version() is None

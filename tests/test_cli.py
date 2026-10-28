@@ -167,3 +167,8 @@ def test_run_drives_a_workspace_with_no_verticals_to_completion(
     )
     assert result.exit_code == 0
     assert "(no verticals)" in result.output
+
+
+def test_doctor_reports_each_pinned_tool() -> None:
+    result = runner.invoke(app, ["doctor"])
+    assert "nmap: pinned" in result.output

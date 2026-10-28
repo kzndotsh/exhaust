@@ -50,6 +50,9 @@ class FakeScanner:
         self.calls.append((method, params))
         return ToolResult(ok=True, output=f"ran {method} with {params}")
 
+    def installed_version(self) -> str | None:
+        return "1.0.0"
+
 
 def _write_scope_contract(workspace_dir: Path, target: str) -> None:
     (workspace_dir / "SCOPE_CONTRACT.yaml").write_text(

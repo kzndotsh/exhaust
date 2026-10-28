@@ -37,7 +37,7 @@ from exhaust.harness.pi_adapter import (
     PiLaunchConfig,
     PiProtocolError,
 )
-from exhaust.rig import default_bridges
+from exhaust.rig import PINNED_TOOLS, check_pinned_tools, default_bridges
 
 app = typer.Typer()
 
@@ -103,6 +103,15 @@ def run(
         raise typer.Exit(code=1)
 
     bridges = default_bridges()
+    for result in check_pinned_tools(bridges, PINNED_TOOLS):
+        if not result.ok:
+            installed = result.installed_version or "not found"
+            typer.echo(
+                f"warning: {result.name} pinned at {result.pinned_version}, "
+                f"found {installed} (run 'exhaust doctor' for details)",
+                err=True,
+            )
+
     socket_path = Path(f"/tmp/exhaust-pi-{uuid.uuid4().hex[:12]}.sock")
 
     with contextlib.ExitStack() as stack:
