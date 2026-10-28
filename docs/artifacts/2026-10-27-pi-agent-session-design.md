@@ -505,10 +505,12 @@ the adapter itself; the override lived entirely in Pi's own config for this one 
 
 Done: `translate.py`, `schema.py`, `rpc.py`, `relay.py`, `session.py`, and `gate/extension.ts` are
 all implemented and tested (see Implementation reconciliation). An end-to-end run against a live
-`pi` subprocess with real model credentials is also done. What's left is wiring this into an actual
-`exhaust run` CLI path — nothing has called `PiAgentSession.launch()` from `Harness.run()` yet — and
-ADR 0021's credential-proxy implementation, so `provider_base_url` stops being a named stub that a
-scratch `models.json` override has to stand in for.
+`pi` subprocess with real model credentials is also done. `exhaust run` (`cli/run.py`) now calls
+`PiAgentSession.launch()` and drives it through `Harness.open(...).run(...)`, with no Rig bridges
+wired in yet (ADR 0012: nothing's pinned), so it can drive `SetVerticalState`/`SelfReport` turns but
+not a real `SandboxCall`/`RealTargetCall`. What's left is pinning a first real Rig tool, and ADR
+0021's credential-proxy implementation, so `provider_base_url` stops being a named stub that only a
+scratch `models.json` override can stand in for.
 
 ## Explicitly out of scope
 

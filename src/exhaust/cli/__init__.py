@@ -10,10 +10,12 @@ import typer
 from exhaust import __version__
 from exhaust.cli.catalog import app as catalog_app
 from exhaust.cli.new import app as new_app
+from exhaust.cli.run import app as run_app
 
 app = typer.Typer(name="exhaust", no_args_is_help=True)
 app.add_typer(new_app)
 app.add_typer(catalog_app)
+app.add_typer(run_app)
 
 
 def _version_callback(value: bool) -> None:
