@@ -22,6 +22,7 @@ from exhaust.harness.pi_adapter.errors import (
     MalformedRelayCallError,
     PiProtocolError,
 )
+from exhaust.harness.pi_adapter.provider_config import write_anthropic_proxy_config
 from exhaust.harness.pi_adapter.relay import (
     PendingRelayCall,
     RelayChannel,
@@ -33,6 +34,7 @@ from exhaust.harness.pi_adapter.translate import RelayCall, action_from_relay, o
 from exhaust.rig import ToolInfo
 
 _RELAY_SOCKET_ENV_VAR = "EXHAUST_RELAY_SOCKET"
+_AGENT_DIR_ENV_VAR = "PI_CODING_AGENT_DIR"
 
 
 @dataclass(frozen=True)
@@ -56,10 +58,22 @@ class PiLaunchConfig:
     model : str
         Passed to Pi's own `--model` flag, required alongside `--provider`.
     provider_base_url : str | None
-        The seam ADR 0021's credential proxy fronts. Not yet plumbed into
-        a real Pi provider config by this adapter — that wiring is out of
-        scope until the proxy itself exists (see the design doc). Kept
-        here so the seam is named, not silently dropped.
+        The seam ADR 0021's credential proxy fronts. When set, `launch()`
+        writes it into Pi's own `models.json` as the `anthropic` provider's
+        `baseUrl` override — Pi's own documented mechanism for routing a
+        built-in provider through a proxy — which requires `agent_dir` to
+        also be set, since that's where Pi reads `models.json` from.
+    agent_dir : Path | None
+        A dedicated directory for this run's Pi config
+        (`PI_CODING_AGENT_DIR`), holding the `models.json`/`auth.json`
+        `launch()` writes when `provider_base_url`/`anthropic_credential_file`
+        are set. `None` leaves Pi on its own default agent directory
+        (`~/.pi/agent`) and writes nothing.
+    anthropic_credential_file : Path | None
+        Where this run's budget-capped virtual key lives on disk
+        (ADR 0021). When set alongside `agent_dir`, `launch()` writes
+        `auth.json` so Pi reads the key from that file via its own
+        `!<command>` mechanism, never from this process's environment.
     gate_extension_file : Path
         This package's own `gate/extension.ts`, passed to `--extension`
         explicitly — Pi loads no extensions into a fresh session by
@@ -93,10 +107,30 @@ class PiLaunchConfig:
     model: str
     provider_base_url: str | None
     gate_extension_file: Path
+    agent_dir: Path | None = None
+    anthropic_credential_file: Path | None = None
     handshake_timeout_s: float = 10.0
     turn_poll_timeout_s: float = 30.0
     settle_reprompts: int = 2
     process_teardown_timeout_s: float = 5.0
+
+    def __post_init__(self) -> None:
+        """Refuse a config that can't actually reach Pi's provider config.
+
+        Raises
+        ------
+        ValueError
+            If `provider_base_url` or `anthropic_credential_file` is set
+            without `agent_dir` — `launch()` would have nowhere to write
+            `models.json`/`auth.json`, and Pi would silently keep using
+            its own default agent directory instead.
+        """
+        if self.agent_dir is None and (
+            self.provider_base_url is not None or self.anthropic_credential_file is not None
+        ):
+            raise ValueError(
+                "provider_base_url/anthropic_credential_file require agent_dir to be set"
+            )
 
 
 def _compose_opening_prompt(request: AgentTurnRequest) -> str:
@@ -151,8 +185,17 @@ class PiAgentSession:
             vertical's first `step()` call, not once here: a session with
             no vertical visited yet has spawned no Pi session to verify.
         """
+        if cfg.agent_dir is not None and cfg.provider_base_url is not None:
+            write_anthropic_proxy_config(
+                cfg.agent_dir,
+                base_url=cfg.provider_base_url,
+                virtual_key_file=cfg.anthropic_credential_file,
+            )
+
         relay = UnixSocketRelayChannel(socket_path)
         env = {**os.environ, _RELAY_SOCKET_ENV_VAR: str(socket_path)}
+        if cfg.agent_dir is not None:
+            env[_AGENT_DIR_ENV_VAR] = str(cfg.agent_dir)
         process = subprocess.Popen(
             [
                 str(cfg.pi_executable),

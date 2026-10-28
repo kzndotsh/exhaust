@@ -276,3 +276,46 @@ def test_launch_uses_the_real_pi_cli_flags(tmp_path: Path, monkeypatch: pytest.M
     assert captured_argv[extension_idx + 1] == "/tmp/gate/extension.ts"
     model_idx = captured_argv.index("--model")
     assert captured_argv[model_idx + 1] == "claude-sonnet-5"
+
+
+def test_provider_base_url_without_agent_dir_is_refused() -> None:
+    with pytest.raises(ValueError, match="agent_dir"):
+        _cfg(provider_base_url="http://127.0.0.1:9000", agent_dir=None)
+
+
+def test_anthropic_credential_file_without_agent_dir_is_refused() -> None:
+    with pytest.raises(ValueError, match="agent_dir"):
+        _cfg(anthropic_credential_file=Path("/tmp/virtual-key"), agent_dir=None)
+
+
+def test_launch_writes_the_proxy_config_when_agent_dir_and_base_url_are_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured_argv: list[str] = []
+
+    class FakeProcess:
+        stdin = None
+        stdout = None
+
+        def terminate(self) -> None:
+            pass
+
+        def wait(self, timeout: float | None = None) -> None:
+            pass
+
+    def fake_popen(argv: list[str], **_kwargs: object) -> FakeProcess:
+        captured_argv.extend(argv)
+        return FakeProcess()
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+    agent_dir = tmp_path / "agent"
+    cfg = _cfg(
+        pi_executable=Path("/usr/local/bin/pi"),
+        provider_base_url="http://127.0.0.1:9000",
+        agent_dir=agent_dir,
+    )
+    with PiAgentSession.launch(cfg, socket_path=tmp_path / "relay.sock"):
+        pass
+
+    assert (agent_dir / "models.json").is_file()

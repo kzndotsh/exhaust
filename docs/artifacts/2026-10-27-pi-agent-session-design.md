@@ -508,10 +508,10 @@ all implemented and tested (see Implementation reconciliation). An end-to-end ru
 `pi` subprocess with real model credentials is also done. `exhaust run` (`cli/run.py`) now calls
 `PiAgentSession.launch()` and drives it through `Harness.open(...).run(...)`, wired with `nmap`
 (ADR 0026) as the Rig's first pinned tool, so it can dispatch a `SandboxCall`/`RealTargetCall`
-naming `nmap`, not just `SetVerticalState`/`SelfReport` turns. What's left is ADR 0021's
-credential-proxy implementation, so `provider_base_url` stops being a named stub that only a scratch
-`models.json` override can stand in for, and a second Rig tool to prove the first one wasn't a
-one-off fit.
+naming `nmap`, not just `SetVerticalState`/`SelfReport` turns. ADR 0021's credential-proxy is also
+implemented (`credential_proxy.py`) and wired into `exhaust run --anthropic-key-file`, verified
+against a real model call through a live endpoint; `provider_base_url` is no longer a named stub.
+What's left is a second Rig tool, to prove the first one wasn't a one-off fit.
 
 ## Explicitly out of scope
 
