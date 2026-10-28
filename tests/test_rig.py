@@ -14,7 +14,7 @@ from exhaust.rig import (
 
 
 class FakeScanner:
-    """A minimal ToolBridge fake: real tools don't exist yet to test against."""
+    """A minimal ToolBridge fake, for testing the gate itself in isolation from any real tool."""
 
     info = ToolInfo(name="fake-scanner", usage="scans fake things", doc="see fake-scanner docs")
     methods = (

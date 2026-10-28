@@ -1,10 +1,10 @@
 """The 'exhaust run' command: drive a Workspace with the Pi-backed `AgentSession` (ADR 0025).
 
 The only place in the CLI that knows Pi exists, per ADR 0025: everything
-else — `Harness`, `core.py`, `actions.py` — stays unaware of it. No Rig
-bridges are wired in yet (ADR 0012: no tools are pinned yet), so a run
-started this way can drive `SetVerticalState` and `SelfReport` turns but
-cannot yet dispatch a `SandboxCall` or `RealTargetCall` to anything real.
+else — `Harness`, `core.py`, `actions.py` — stays unaware of it. `nmap`
+(ADR 0026) is the only Rig tool pinned so far, so a run started this
+way can dispatch a `SandboxCall`/`RealTargetCall` naming it, but
+nothing else.
 """
 
 import uuid
@@ -22,6 +22,7 @@ from exhaust.harness.pi_adapter import (
     PiLaunchConfig,
     PiProtocolError,
 )
+from exhaust.rig import NmapBridge, ToolBridge
 
 app = typer.Typer()
 
@@ -63,9 +64,11 @@ def run(
     )
     socket_path = Path(f"/tmp/exhaust-pi-{uuid.uuid4().hex[:12]}.sock")
 
+    bridges: dict[str, ToolBridge] = {"nmap": NmapBridge()}
+
     try:
         with PiAgentSession.launch(cfg, socket_path=socket_path) as agent:
-            harness = Harness.open(workspace_dir, skills_dir, target, agent=agent)
+            harness = Harness.open(workspace_dir, skills_dir, target, agent=agent, bridges=bridges)
             outcome = harness.run(budget=RunBudget(max_turns=max_turns))
     except (GateNotLoadedError, HandshakeSkippedError) as exc:
         typer.echo(f"refusing to run ungated: {exc}", err=True)

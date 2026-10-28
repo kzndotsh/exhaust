@@ -3,11 +3,10 @@
 The Rig wraps existing, well-known security tools rather than
 reimplementing them, each pinned to a specific version installed from
 its own upstream release. This module is the data shape one pinned
-entry takes. No tools are actually pinned yet: which tools the Rig
-ships is a separate, still-open decision, the same way the Playbook's
+entry takes. Which other tools the Rig ships beyond the first one
+remains a separate, still-open decision, the same way the Playbook's
 vertical catalog (`catalog.py`) is deliberately empty until that's
-decided. Nothing here should be read as a commitment to any specific
-tool.
+decided.
 """
 
 from dataclasses import dataclass
@@ -35,4 +34,11 @@ class PinnedTool:
     platform: str
 
 
-PINNED_TOOLS: tuple[PinnedTool, ...] = ()
+PINNED_TOOLS: tuple[PinnedTool, ...] = (
+    PinnedTool(
+        name="nmap",
+        version="7.992",
+        source="https://github.com/nmap/nmap",
+        platform="linux-x86_64",
+    ),
+)

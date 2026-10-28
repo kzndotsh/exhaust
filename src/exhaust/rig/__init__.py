@@ -12,10 +12,12 @@ from exhaust.rig.bridges import (
     tools,
 )
 from exhaust.rig.catalog import PINNED_TOOLS, PinnedTool
+from exhaust.rig.nmap import NmapBridge
 
 __all__ = [
     "PINNED_TOOLS",
     "MethodInfo",
+    "NmapBridge",
     "PinnedTool",
     "ToolBridge",
     "ToolInfo",
