@@ -53,8 +53,9 @@ def _cfg(**overrides: object) -> PiLaunchConfig:
     defaults: dict[str, object] = {
         "pi_executable": Path("/usr/local/bin/pi"),
         "provider": "anthropic",
+        "model": "claude-sonnet-5",
         "provider_base_url": None,
-        "gate_extension_dir": Path("/tmp/gate"),
+        "gate_extension_file": Path("/tmp/gate/extension.ts"),
         "handshake_timeout_s": 1.0,
         "turn_poll_timeout_s": 1.0,
         "settle_reprompts": 2,
@@ -236,3 +237,42 @@ def test_launch_spawns_pi_with_builtin_tools_disabled(
         pass
 
     assert "--no-builtin-tools" in captured_argv
+
+
+def test_launch_uses_the_real_pi_cli_flags(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Regression: a no-credential smoke test against the real `pi` binary found
+    # two wrong assumptions here. `--extensions <dir>` doesn't exist; the real
+    # flag is singular `--extension <file>`, and it won't load a directory
+    # unless it holds an `index.ts`/`index.js`, which `gate/` doesn't. And
+    # `--provider` alone is rejected by the real CLI: it requires `--model`.
+    captured_argv: list[str] = []
+
+    class FakeProcess:
+        stdin = None
+        stdout = None
+
+        def terminate(self) -> None:
+            pass
+
+        def wait(self, timeout: float | None = None) -> None:
+            pass
+
+    def fake_popen(argv: list[str], **_kwargs: object) -> FakeProcess:
+        captured_argv.extend(argv)
+        return FakeProcess()
+
+    monkeypatch.setattr("subprocess.Popen", fake_popen)
+
+    cfg = _cfg(
+        pi_executable=Path("/usr/local/bin/pi"),
+        gate_extension_file=Path("/tmp/gate/extension.ts"),
+        model="claude-sonnet-5",
+    )
+    with PiAgentSession.launch(cfg, socket_path=tmp_path / "relay.sock"):
+        pass
+
+    assert "--extensions" not in captured_argv
+    extension_idx = captured_argv.index("--extension")
+    assert captured_argv[extension_idx + 1] == "/tmp/gate/extension.ts"
+    model_idx = captured_argv.index("--model")
+    assert captured_argv[model_idx + 1] == "claude-sonnet-5"

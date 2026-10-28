@@ -436,6 +436,29 @@ real, installed types and documentation, and against this adapter's own logic th
 real local socket, but no live model has ever actually called one of these tools. That remains the
 next real risk before trusting this in production.
 
+A follow-up no-credential smoke test — installing `@earendil-works/pi-coding-agent@1.4.0` in
+isolation and actually spawning `pi --mode rpc` with `session.py`'s real `launch()` argv — found two
+more wrong assumptions, both in argv construction rather than in the TypeScript or the Python
+domain logic, and both now fixed and regression-tested:
+
+- **The flag is singular: `--extension <file>`, not `--extensions <dir>`.** `pi --help` on the real
+  CLI confirms it; `--extensions` doesn't exist, and `--no-extensions`/`-ne` (a different flag) is
+  only for disabling discovery. It also only loads a directory if that directory holds an
+  `index.ts`/`index.js` entry point — `gate/` holds `extension.ts`, so the config now names the file
+  directly (`PiLaunchConfig.gate_extension_file`, renamed from `gate_extension_dir`). Loading the
+  real `gate/extension.ts` this way against the real `pi` binary registered all seven tools and its
+  `tool_call` hook with no runtime error, confirming the TypeScript is correct under Pi's own `jiti`
+  transform, not just under `tsc --noEmit`.
+- **`--provider` alone is rejected by the real CLI**: `Error: --provider requires --model (for
+  example: --provider anthropic --model <pattern>)`. `PiLaunchConfig` gained a required `model`
+  field, now passed as `--model` alongside `--provider` in `launch()`'s argv.
+
+Both are pinned by `tests/test_pi_adapter_session.py::test_launch_uses_the_real_pi_cli_flags`. What
+this smoke test still doesn't cover, by design: no model credentials means no prompt was ever sent
+and no tool was ever actually invoked by a live model, so the relay round trip itself (a real call
+arriving over the Unix socket from a live `pi` run) remains the one thing only a credentialed run
+can prove.
+
 ## Open questions and risks
 
 - **Resolved by the verification spike**: `new_session` is real (confirmed); the

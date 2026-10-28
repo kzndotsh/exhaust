@@ -43,23 +43,32 @@ class PiLaunchConfig:
     ----------
     pi_executable : Path
         The `pi` binary, started as `pi --mode rpc --no-session
-        --no-builtin-tools --extensions <gate_extension_dir>`.
-        `--no-builtin-tools` is the host-enforced half of the gate: Pi's
-        own built-in tools (`bash`, `edit`, `write`, ...) never exist in
-        this subprocess at all, so the extension's `tool_call` allowlist
-        hook is defense-in-depth on top of that, never the sole boundary.
+        --no-builtin-tools --extension <gate_extension_file> --provider
+        <provider> --model <model>`. `--no-builtin-tools` is the
+        host-enforced half of the gate: Pi's own built-in tools (`bash`,
+        `edit`, `write`, ...) never exist in this subprocess at all, so
+        the extension's `tool_call` allowlist hook is defense-in-depth on
+        top of that, never the sole boundary.
     provider : str
         Passed to Pi's own `--provider` flag (accepts a bare provider id
-        or `provider/id`, per Pi's CLI reference).
+        or `provider/id`, per Pi's CLI reference). Confirmed against the
+        real CLI: `--provider` is rejected unless `--model` is also given.
+    model : str
+        Passed to Pi's own `--model` flag, required alongside `--provider`.
     provider_base_url : str | None
         The seam ADR 0021's credential proxy fronts. Not yet plumbed into
         a real Pi provider config by this adapter — that wiring is out of
         scope until the proxy itself exists (see the design doc). Kept
         here so the seam is named, not silently dropped.
-    gate_extension_dir : Path
-        This package's own `gate/`, passed to `--extensions` explicitly —
-        Pi loads no extensions into a fresh session by default (the
-        `pi-schedule-prompt` finding ADR 0025 names).
+    gate_extension_file : Path
+        This package's own `gate/extension.ts`, passed to `--extension`
+        explicitly — Pi loads no extensions into a fresh session by
+        default (the `pi-schedule-prompt` finding ADR 0025 names). Must
+        name the `.ts` file itself: Pi's `--extension` flag loads a single
+        file directly, or a directory only if it holds an `index.ts` or
+        `index.js` entry point, which this one does not (confirmed
+        against the real CLI; the flag is also singular, not `--extensions`
+        as first assumed).
     handshake_timeout_s : float
         How long to wait for the handshake tool call on a freshly started
         session before refusing to run (`GateNotLoadedError`), and the
@@ -81,8 +90,9 @@ class PiLaunchConfig:
 
     pi_executable: Path
     provider: str
+    model: str
     provider_base_url: str | None
-    gate_extension_dir: Path
+    gate_extension_file: Path
     handshake_timeout_s: float = 10.0
     turn_poll_timeout_s: float = 30.0
     settle_reprompts: int = 2
@@ -152,8 +162,10 @@ class PiAgentSession:
                 "--no-builtin-tools",
                 "--provider",
                 cfg.provider,
-                "--extensions",
-                str(cfg.gate_extension_dir),
+                "--model",
+                cfg.model,
+                "--extension",
+                str(cfg.gate_extension_file),
             ],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
