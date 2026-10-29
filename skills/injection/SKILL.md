@@ -102,7 +102,7 @@ enough to be worth deferring from every other turn's context.
 
 ## Known gaps
 
-`curl` (`src/exhaust/rig/wrappers/http.py`, ADR 0027) submits GET query
+`curl` (`src/exhaust/rig/wrappers/curl.py`, ADR 0027) submits GET query
 parameters (`curl.get`) and POST form fields (`curl.post_form`), so
 steps 2 through 5 above now have a real Rig method to dispatch
 through for any input shaped as a query parameter or form field. Both

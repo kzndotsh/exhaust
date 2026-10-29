@@ -3,7 +3,7 @@ from pathlib import Path
 
 from exhaust.rig.bridges import call
 from exhaust.rig.wrappers import default_bridges
-from exhaust.rig.wrappers.http import CurlBridge
+from exhaust.rig.wrappers.curl import CurlBridge
 
 _FAKE_CURL = """\
 #!/usr/bin/env python3

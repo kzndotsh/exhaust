@@ -9,7 +9,7 @@ bridge class by hand as the list grows.
 """
 
 from exhaust.rig.bridges import ToolBridge
-from exhaust.rig.wrappers.http import CurlBridge
+from exhaust.rig.wrappers.curl import CurlBridge
 from exhaust.rig.wrappers.nmap import NmapBridge
 
 __all__ = ["CurlBridge", "NmapBridge", "default_bridges"]
