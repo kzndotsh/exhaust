@@ -135,5 +135,5 @@ don't skip them silently. See ADR 0027 for why.
 
 - PortSwigger, SQL injection: <https://portswigger.net/web-security/sql-injection>
 - PortSwigger, OS command injection: <https://portswigger.net/web-security/os-command-injection>
-- PortSwigger, LDAP injection: <https://portswigger.net/web-security/ldap-injection>
 - PortSwigger, Server-side template injection: <https://portswigger.net/web-security/server-side-template-injection>
+- PortSwigger, NoSQL injection: <https://portswigger.net/web-security/nosql-injection>
