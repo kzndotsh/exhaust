@@ -29,15 +29,26 @@ locked.
    when" trigger; and a "do not use for X, use `<vertical>`" clause
    naming the nearest vertical it could be confused with.
 4. Write the body: what this vertical investigates, its numbered
-   procedure, its own exit condition, its sub-cases (inline until one
-   outgrows a few lines, then split into `references/<name>.md`), and a
-   `Known gaps` section naming any step that needs a Rig tool or method
-   that isn't pinned yet. Never invent a tool call the Rig doesn't
-   register.
-5. Run `uv run exhaust catalog generate && uv run exhaust catalog check`.
-   One vertical per PR.
+   procedure, its own exit condition, an optional `Rationalizations to
+   reject` section for security verticals, its sub-cases (inline until
+   one needs detail no other sub-case does, then split into
+   `references/<name>.md` — see `skills/TEMPLATE/references/EXAMPLE-SUBCASE.md`
+   for the shape), and a `Known gaps` section naming any step that
+   needs a Rig tool or method that isn't pinned yet. Never invent a
+   tool call the Rig doesn't register. Use capitalized MUST/MUST
+   NOT/SHOULD/MAY (RFC 2119) inside Procedure and Exit condition only,
+   and render Exit condition as a checklist once more than one
+   independent condition closes it. See
+   `docs/research/2026-10-29-procedural-writing-standards.md` for why
+   each of these conventions earned a place in the template.
+5. Run `uv run exhaust catalog generate && uv run exhaust catalog check
+   && uv run exhaust skill lint`. One vertical per PR.
 
-`skills/injection/SKILL.md` is a worked example of all five steps,
-including a `Known gaps` section written honestly rather than papered
+`skills/injection/SKILL.md` is a worked example of steps 1 through 3
+and the `Known gaps` discipline (written honestly rather than papered
 over: no Rig tool currently submits a payload to a Target, so most of
-its procedure is blocked on a tool that isn't pinned yet.
+its procedure was blocked on a tool that isn't pinned yet). It
+predates the RFC 2119 keyword, checklist Exit condition, and
+Rationalizations-to-reject conventions `skills/TEMPLATE/SKILL.md` now
+specifies — retrofitting it is a separate, deliberate pass, not
+something to do piecemeal while writing the next vertical.
