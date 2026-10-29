@@ -41,11 +41,16 @@ class VerticalEntry:
     gate : str | None
         The recon-confirmed trigger signal, set only when `required` is
         False.
+    description : str
+        ADR 0017's routing contract: what the vertical's procedure does,
+        when to use it, and the nearest vertical it could be confused
+        with. The only text read before a vertical's full body loads.
     """
 
     name: str
     required: bool
     gate: str | None
+    description: str
 
 
 def _split_front_matter(text: str, source: Path) -> tuple[str, str]:
@@ -129,8 +134,8 @@ def _entry_from_front_matter(data: dict[str, Any], source: Path) -> VerticalEntr
     ------
     MalformedSkillFileError
         If `name` is missing or empty, `required` is not a bool, a
-        required vertical carries a `gate`, or a gated vertical is
-        missing one.
+        required vertical carries a `gate`, a gated vertical is missing
+        one, or `description` is missing or empty.
     """
     name = data.get("name")
     if not isinstance(name, str) or not name:
@@ -150,7 +155,11 @@ def _entry_from_front_matter(data: dict[str, Any], source: Path) -> VerticalEntr
                 f"{source}: 'gate' is required and must be non-empty when required is false"
             )
 
-    return VerticalEntry(name=name, required=required, gate=gate)
+    description = data.get("description")
+    if not isinstance(description, str) or not description.strip():
+        raise MalformedSkillFileError(f"{source}: missing or empty 'description'")
+
+    return VerticalEntry(name=name, required=required, gate=gate, description=description)
 
 
 def discover_verticals(skills_dir: Path) -> list[VerticalEntry]:

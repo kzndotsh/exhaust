@@ -1,6 +1,7 @@
 {
   "verticals": [
     {
+      "description": "Probes every discovered input for command, SQL, LDAP, template (SSTI), header/CRLF, and NoSQL injection by submitting a canonical boundary-breaking payload per class and diffing the observed response against a clean baseline. Use for any Workspace once recon has enumerated at least one request-shaped input (form field, query parameter, header, cookie, path segment, or uploaded filename). Do not use for deserialization of structured payloads (pickle, YAML, XML, Java-object streams) \u2014 that's the `deserialization` vertical; this one is for payloads interpreted as code or query syntax, never payloads reconstructed as a data structure.\n",
       "gate": null,
       "name": "injection",
       "required": true

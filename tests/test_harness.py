@@ -78,6 +78,8 @@ class ScriptedAgent:
 def _write_skill(skills_dir: Path, slug: str, front_matter: str) -> None:
     skill_dir = skills_dir / slug
     skill_dir.mkdir(parents=True)
+    if "description:" not in front_matter:
+        front_matter += "description: Use when testing. Do not use for anything else.\n"
     (skill_dir / "SKILL.md").write_text(f"---\n{front_matter}---\nBody.\n")
 
 

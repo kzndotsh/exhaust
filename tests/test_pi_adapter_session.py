@@ -66,7 +66,12 @@ def _cfg(**overrides: object) -> PiLaunchConfig:
 
 def _request(vertical: str = "injection") -> AgentTurnRequest:
     return AgentTurnRequest(
-        vertical=VerticalEntry(name=vertical, required=True, gate=None),
+        vertical=VerticalEntry(
+            name=vertical,
+            required=True,
+            gate=None,
+            description="Use when testing. Do not use for anything else, use the other vertical.",
+        ),
         procedure="Try these payloads.",
         available_tools=(ToolInfo(name="fake-scanner", usage="scans", doc="see docs"),),
     )
