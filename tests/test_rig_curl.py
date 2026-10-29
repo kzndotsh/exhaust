@@ -60,6 +60,93 @@ def test_post_form_sends_each_field_as_its_own_data_urlencode_token(tmp_path: Pa
     )
 
 
+def test_get_appends_a_raw_unencoded_path_segment(tmp_path: Path) -> None:
+    bridge = CurlBridge(executable=_fake_curl(tmp_path))
+    result = bridge.run("get", url="http://target.example/files", path_segment="../../etc/passwd")
+    assert result.ok is True
+    assert result.output.strip().endswith("-- http://target.example/files/../../etc/passwd")
+
+
+def test_get_combines_path_segment_and_query(tmp_path: Path) -> None:
+    bridge = CurlBridge(executable=_fake_curl(tmp_path))
+    result = bridge.run(
+        "get", url="http://target.example/files", path_segment="report.pdf", query={"v": "1"}
+    )
+    assert result.ok is True
+    assert result.output.strip().endswith("-- http://target.example/files/report.pdf?v=1")
+
+
+def test_a_non_string_path_segment_is_refused(tmp_path: Path) -> None:
+    script, marker = _touch_on_run(tmp_path)
+    bridge = CurlBridge(executable=script)
+    result = bridge.run("get", url="http://target.example/", path_segment=1)
+    assert result.ok is False
+    assert not marker.exists()
+
+
+def test_get_sends_a_custom_header(tmp_path: Path) -> None:
+    bridge = CurlBridge(executable=_fake_curl(tmp_path))
+    result = bridge.run("get", url="http://target.example/", headers={"Cookie": "session=' OR 1=1"})
+    assert result.ok is True
+    assert "-H Cookie: session=' OR 1=1" in result.output
+
+
+def test_post_form_sends_a_custom_header(tmp_path: Path) -> None:
+    bridge = CurlBridge(executable=_fake_curl(tmp_path))
+    result = bridge.run(
+        "post_form",
+        url="http://target.example/login",
+        data={"user": "a"},
+        headers={"X-Forwarded-For": "127.0.0.1"},
+    )
+    assert result.ok is True
+    assert "-H X-Forwarded-For: 127.0.0.1" in result.output
+
+
+def test_a_non_string_header_value_is_refused(tmp_path: Path) -> None:
+    script, marker = _touch_on_run(tmp_path)
+    bridge = CurlBridge(executable=script)
+    result = bridge.run("get", url="http://target.example/", headers={"X-Test": 1})
+    assert result.ok is False
+    assert not marker.exists()
+
+
+def test_post_multipart_sends_the_field_with_an_attacker_controlled_filename(
+    tmp_path: Path,
+) -> None:
+    bridge = CurlBridge(executable=_fake_curl(tmp_path))
+    result = bridge.run(
+        "post_multipart",
+        url="http://target.example/upload",
+        field="avatar",
+        filename="../../etc/passwd",
+        content="harmless test content",
+    )
+    assert result.ok is True
+    assert "filename=../../etc/passwd" in result.output
+    assert result.output.strip().endswith("-- http://target.example/upload")
+
+
+def test_post_multipart_without_content_uploads_an_empty_file(tmp_path: Path) -> None:
+    bridge = CurlBridge(executable=_fake_curl(tmp_path))
+    result = bridge.run(
+        "post_multipart", url="http://target.example/upload", field="f", filename="x.txt"
+    )
+    assert result.ok is True
+
+
+def test_post_multipart_with_a_missing_filename_is_refused(tmp_path: Path) -> None:
+    bridge = CurlBridge(executable=_fake_curl(tmp_path))
+    result = bridge.run("post_multipart", url="http://target.example/upload", field="f")
+    assert result.ok is False
+
+
+def test_post_multipart_with_a_missing_field_is_refused(tmp_path: Path) -> None:
+    bridge = CurlBridge(executable=_fake_curl(tmp_path))
+    result = bridge.run("post_multipart", url="http://target.example/upload", filename="x.txt")
+    assert result.ok is False
+
+
 def test_every_request_carries_browser_shaped_default_headers(tmp_path: Path) -> None:
     bridge = CurlBridge(executable=_fake_curl(tmp_path))
     result = bridge.run("get", url="http://target.example/")

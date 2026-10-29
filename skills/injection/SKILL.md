@@ -44,7 +44,12 @@ explains.
    filename the Target exposes is a candidate. An input not on this
    list before step 2 starts MUST NOT be probed — do not discover and
    test in the same pass, since an untracked input makes the Exit
-   condition below unverifiable.
+   condition below unverifiable. Dispatch per input shape (ADR 0027):
+   `curl.get` for query parameters and, via its `path_segment`
+   parameter, path segments; `curl.post_form` for form fields; either
+   method's `headers` parameter for header and cookie inputs;
+   `curl.post_multipart` for uploaded-filename inputs, where `filename`
+   is the injection point and `content` is harmless test data.
 2. MUST record a baseline for every input first: submit each input's
    own normal, well-formed value and record the response (status code,
    timing, body length, and any error text verbatim). Every later diff
@@ -144,14 +149,6 @@ default). Split one out into its own `references/<name>.md` the first
 time its procedure needs engine-specific detail (e.g. a payload table
 keyed on which SQL dialect or templating engine recon identified) long
 enough to be worth deferring from every other turn's context.
-
-## Known gaps
-
-`curl.get`/`curl.post_form` (ADR 0027) dispatch steps 2 through 5 for
-query-parameter and form-field inputs. Header/cookie inputs,
-uploaded-filename inputs, and path-segment inputs have no Rig method
-yet: treat those as blocked, name them in the run's own notes, and
-don't skip them silently. See ADR 0027 for why.
 
 ## References
 

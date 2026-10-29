@@ -1,18 +1,20 @@
 """The Rig's second pinned tool: curl, a payload-submission client (ADR 0012, ADR 0018, ADR 0027).
 
-Two narrow, enumerated methods, `get` and `post_form`, neither accepting
-anything beyond a validated `url` and an optional flat string-to-string
-mapping of request values. Neither builds a shell command from those
-values: every value reaches `curl` as its own argv token (`--data-urlencode`
-for form fields, a hand-built, percent-encoded query string for `get`),
-so nothing a caller passes can be read as a second `curl` flag the way an
-unvalidated `host` could smuggle an nmap flag (ADR 0018's same concern,
-applied to a tool whose whole job is submitting attacker-controlled
-values instead of refusing them).
+Three narrow, enumerated methods, `get`, `post_form`, and `post_multipart`,
+none accepting anything beyond a validated `url` and flat string-to-string
+request values (or, for `post_multipart`, a filename string, the one
+field the method exists to inject into). Neither builds a shell command
+from those values: every value reaches `curl` as its own argv token
+(`--data-urlencode` for form fields, `-F` for multipart, a hand-built
+query string for `get`), so nothing a caller passes can be read as a
+second `curl` flag the way an unvalidated `host` could smuggle an nmap
+flag (ADR 0018's same concern, applied to a tool whose whole job is
+submitting attacker-controlled values instead of refusing them).
 """
 
 import re
 import subprocess
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,7 +25,7 @@ from exhaust.rig.bridges import MethodInfo, ToolInfo, ToolResult
 
 _INFO = ToolInfo(
     name="curl",
-    usage="HTTP client: submits GET query parameters or POST form fields to a Target.",
+    usage="HTTP client: GET/path-segment/header values, POST form fields, or a multipart upload.",
     doc="https://curl.se/docs/manpage.html",
 )
 
@@ -36,6 +38,12 @@ _METHODS = (
     ),
     MethodInfo(
         name="post_form",
+        mutates=True,
+        consequential=True,
+        required_extent="full",
+    ),
+    MethodInfo(
+        name="post_multipart",
         mutates=True,
         consequential=True,
         required_extent="full",
@@ -93,6 +101,8 @@ class CurlBridge:
             return self._get(params)
         if method == "post_form":
             return self._post_form(params)
+        if method == "post_multipart":
+            return self._post_multipart(params)
         return ToolResult(ok=False, output=f"curl: unknown method {method!r}")
 
     def _get(self, params: Mapping[str, Any]) -> ToolResult:
@@ -101,17 +111,31 @@ class CurlBridge:
             return ToolResult(ok=False, output=f"curl: invalid url {url!r}")
 
         query = params.get("query")
-        query_valid = query is None or _is_flat_string_mapping(query)
-        if not query_valid:
+        if query is not None and not _is_flat_string_mapping(query):
             return ToolResult(ok=False, output=f"curl: invalid query {query!r}")
 
+        path_segment = params.get("path_segment")
+        if path_segment is not None and not isinstance(path_segment, str):
+            return ToolResult(ok=False, output=f"curl: invalid path_segment {path_segment!r}")
+
+        headers = params.get("headers")
+        if headers is not None and not _is_flat_string_mapping(headers):
+            return ToolResult(ok=False, output=f"curl: invalid headers {headers!r}")
+
         full_url = url
+        if path_segment is not None:
+            # Deliberately not percent-encoded: path-segment injection's own
+            # payload IS the encoding under test (raw "../", "%2e%2e%2f",
+            # double-encoded variants). The "--" separator already stops this
+            # from ever being read as a curl flag; no further escaping is this
+            # bridge's job to impose on what it exists to deliver intact.
+            full_url = f"{url.rstrip('/')}/{path_segment}"
         if query:
             pairs = "&".join(f"{quote(str(k))}={quote(str(v))}" for k, v in query.items())
-            separator = "&" if "?" in url else "?"
-            full_url = f"{url}{separator}{pairs}"
+            separator = "&" if "?" in full_url else "?"
+            full_url = f"{full_url}{separator}{pairs}"
 
-        return self._invoke(["--", full_url])
+        return self._invoke(["--", full_url], headers=headers)
 
     def _post_form(self, params: Mapping[str, Any]) -> ToolResult:
         url = params.get("url")
@@ -122,17 +146,57 @@ class CurlBridge:
         if not _is_flat_string_mapping(data):
             return ToolResult(ok=False, output=f"curl: invalid data {data!r}")
 
+        headers = params.get("headers")
+        if headers is not None and not _is_flat_string_mapping(headers):
+            return ToolResult(ok=False, output=f"curl: invalid headers {headers!r}")
+
         argv: list[str] = []
         for key, value in data.items():
             argv.extend(["--data-urlencode", f"{key}={value}"])
         argv.extend(["--", url])
 
-        return self._invoke(argv)
+        return self._invoke(argv, headers=headers)
 
-    def _invoke(self, argv: list[str]) -> ToolResult:
+    def _post_multipart(self, params: Mapping[str, Any]) -> ToolResult:
+        url = params.get("url")
+        if not isinstance(url, str) or not _URL_PATTERN.fullmatch(url):
+            return ToolResult(ok=False, output=f"curl: invalid url {url!r}")
+
+        field = params.get("field")
+        if not isinstance(field, str) or not field:
+            return ToolResult(ok=False, output=f"curl: invalid field {field!r}")
+
+        filename = params.get("filename")
+        if not isinstance(filename, str) or not filename:
+            return ToolResult(ok=False, output=f"curl: invalid filename {filename!r}")
+
+        content = params.get("content", "")
+        if not isinstance(content, str):
+            return ToolResult(ok=False, output=f"curl: invalid content {content!r}")
+
+        headers = params.get("headers")
+        if headers is not None and not _is_flat_string_mapping(headers):
+            return ToolResult(ok=False, output=f"curl: invalid headers {headers!r}")
+
+        # The uploaded bytes are never attacker-controlled by this bridge — only
+        # `filename` is the injection point (ADR 0018's narrow surface). curl's
+        # own `-F field=@path;filename=...` lets the on-wire filename differ
+        # from the local temp file's real name, which is exactly what's needed:
+        # a semicolon in `filename` can't smuggle a second `-F` sub-parameter
+        # either, since curl reads the whole `-F` value as one argv token.
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".tmp") as tmp:
+            tmp.write(content)
+            tmp.flush()
+            form_spec = f"{field}=@{tmp.name};filename={filename}"
+            return self._invoke(["-F", form_spec, "--", url], headers=headers)
+
+    def _invoke(self, argv: list[str], *, headers: Mapping[str, str] | None = None) -> ToolResult:
         header_args: list[str] = []
         for header in _DEFAULT_HEADERS:
             header_args.extend(["-H", header])
+        if headers:
+            for name, value in headers.items():
+                header_args.extend(["-H", f"{name}: {value}"])
 
         full_argv = [
             str(self.executable),
