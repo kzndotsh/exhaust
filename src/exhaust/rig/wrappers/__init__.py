@@ -9,11 +9,12 @@ bridge class by hand as the list grows.
 """
 
 from exhaust.rig.bridges import ToolBridge
+from exhaust.rig.wrappers.http import CurlBridge
 from exhaust.rig.wrappers.nmap import NmapBridge
 
-__all__ = ["NmapBridge", "default_bridges"]
+__all__ = ["CurlBridge", "NmapBridge", "default_bridges"]
 
 
 def default_bridges() -> dict[str, ToolBridge]:
     """Every tool this package ships, keyed by name, each freshly constructed."""
-    return {"nmap": NmapBridge()}
+    return {"nmap": NmapBridge(), "curl": CurlBridge()}

@@ -106,7 +106,7 @@ def test_goes_through_the_rig_call_gate_like_any_other_bridge(tmp_path: Path) ->
 
 def test_default_bridges_includes_nmap() -> None:
     bridges = default_bridges()
-    assert set(bridges) == {"nmap"}
+    assert "nmap" in bridges
     assert isinstance(bridges["nmap"], NmapBridge)
 
 

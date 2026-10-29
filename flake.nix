@@ -20,12 +20,14 @@
         devShells.default = pkgs.mkShellNoCC {
           # uv manages the Python toolchain, every Python dependency, and lefthook
           # itself (pyproject.toml's dev group); `just` runs this repo's task
-          # recipes (justfile); nmap is the Rig's one pinned tool today (ADR 0026).
-          # Nothing else here: everything else a Workspace run needs, uv handles.
+          # recipes (justfile); nmap and curl are the Rig's pinned tools today
+          # (ADR 0026, ADR 0027). Nothing else here: everything else a Workspace
+          # run needs, uv handles.
           packages = [
             pkgs.uv
             pkgs.just
             pkgs.nmap
+            pkgs.curl
           ];
 
           shellHook = ''

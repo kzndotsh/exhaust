@@ -43,4 +43,12 @@ PINNED_TOOLS: tuple[PinnedTool, ...] = (
         source="https://github.com/nmap/nmap",
         platform="linux-x86_64",
     ),
+    PinnedTool(
+        name="curl",
+        # Confirmed by evaluating flake.nix's own pinned nixpkgs commit directly
+        # (`nix eval --raw .../curl.version`), not guessed from a changelog (ADR 0027).
+        version="8.22.0",
+        source="https://github.com/curl/curl",
+        platform="linux-x86_64",
+    ),
 )

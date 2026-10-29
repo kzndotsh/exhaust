@@ -102,19 +102,23 @@ enough to be worth deferring from every other turn's context.
 
 ## Known gaps
 
-No Rig tool is currently pinned that submits arbitrary request-shaped
-payloads to a Target. `nmap` (`src/exhaust/rig/wrappers/nmap.py`), the
-Rig's only pinned tool today (ADR 0026), exposes exactly two methods,
-`tcp_connect_scan` and `service_version_scan`, both read-only recon
-against a host and port range. Neither can submit a form value, a
-header, or a query parameter, so steps 2 through 5 above have no Rig
-method to dispatch through yet. A Workspace running this vertical
-today can only use `nmap` to confirm a web service is actually
-listening before step 1's enumeration; the enumeration and probing
-steps themselves are blocked pending an HTTP-request Rig bridge
-(wrapping something like `curl` or a Python request client) being
-pinned and wired into `default_bridges()`. This procedure is written
-now, against that future tool, rather than deferred, so the vertical's
-actual investigative logic is reviewed and ready the moment that
-bridge lands — not invented ad hoc by whichever agent first gets an
-HTTP-capable Rig tool to call.
+`curl` (`src/exhaust/rig/wrappers/http.py`, ADR 0027) submits GET query
+parameters (`curl.get`) and POST form fields (`curl.post_form`), so
+steps 2 through 5 above now have a real Rig method to dispatch
+through for any input shaped as a query parameter or form field. Both
+methods are `required_extent="full"` and `consequential=True` (ADR
+0023, ADR 0024): a Workspace can only run them against a real Target
+once a human has approved the specific call, same as any other
+consequential method.
+
+Two input shapes from step 1's enumeration still have no Rig method:
+headers and cookies (`curl.get`/`curl.post_form` carry only query
+parameters and form fields, nothing that sets a request header) and
+uploaded-filename injection (no multipart/file-upload method is
+pinned). Path-segment injection also has no dedicated method yet; it
+can only be tested today by folding the payload into the `url`
+argument itself, which `curl.get`'s own URL-shape validation may
+reject depending on the payload's characters. Treat an input that
+falls into one of these three shapes as blocked for now, the same way
+the whole vertical was blocked before this tool was pinned — name it
+in the run's own notes rather than skipping it silently.
