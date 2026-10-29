@@ -120,7 +120,7 @@ there are none.
 
 ## 6. Linting
 
-`exhaust catalog check` already enforces the hard schema (`MalformedSkillFileError` on missing/malformed `name`, `required`, `gate`, and on a stale generated file) by construction, since generation itself fails on a malformed file. This proposal adds a second pass, `exhaust skill lint`, run as part of the same `just check`/CI gate, checking what the generator's schema can't by itself:
+`exhaust catalog check` already enforces the hard schema (`MalformedSkillFileError` on missing/malformed `name`, `required`, `gate`, `description`, and on a stale generated file) by construction, since generation itself fails on a malformed file. `exhaust skill lint` is the second pass, run as part of the same `just check`/CI gate, checking what the generator's schema can't by itself:
 
 - **Description shape.** `description` is present, non-empty, and contains a `use when` (or equivalent imperative trigger) clause and a `do not use for` (or equivalent routing-boundary) clause. This is a structural pattern check, not a semantic one — it can't verify the routing boundary it names is the *right* one, only that the four-part contract ADR 0017 requires is actually present, the same gap Cloudflare's own body-template convention left unchecked even though its description contract held.
 - **No orphaned references.** Every file under a vertical's `references/` is mentioned by name somewhere in that vertical's own `SKILL.md` body. An unreferenced file is either dead content or a vertical that forgot to wire in a sub-case it already wrote — either way, worth failing the build over rather than letting it silently rot the way Lynis's second index did (ADR 0016's own cited case).
@@ -140,7 +140,6 @@ Nothing here is new; this section just states the existing pieces as one flow, s
 
 ## What this doesn't settle
 
-- The `description` field is specified here but not yet implemented in `catalog.py`'s schema or enforced by `exhaust catalog check` — that's a follow-up change, scoped to adding one more required string field to the existing validator.
-- `exhaust skill lint` is specified here, not built. It's a new CLI command plus four checks, none of which need new infrastructure beyond what `catalog.py` and `rig/bridges.py` already expose.
-- The `TEMPLATE` exclusion mechanism (denylist by directory name) is a specific, small implementation choice recorded here so it doesn't get reinvented differently later; it hasn't been coded yet.
+**Resolved**: `description` is now a required field in `catalog.py`'s schema, validated non-empty the same way `name`/`required`/`gate` already are. `exhaust skill lint` is built too (`src/exhaust/cli/skill_lint.py`), run as its own `just check`/CI gate alongside `exhaust catalog check`: it enforces the `description`'s "use when"/"do not use for" routing contract, flags a `references/` file nothing in the body points to, flags a procedure naming a Rig tool or method that isn't actually pinned (cross-checked against `default_bridges()`), and warns (doesn't fail) on a directory slug that doesn't match its own front matter's `name`. The `TEMPLATE` exclusion (denylist by directory name) was implemented in `discover_verticals` at the same time `skills/TEMPLATE/SKILL.md` and `skills/injection/SKILL.md` were written.
+
 - Nothing here picks, adds, or removes a single actual vertical. That catalog stays unlocked, governed entirely by `docs/artifacts/2026-10-26-playbook-proposal.md` and its own open questions.

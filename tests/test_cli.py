@@ -172,3 +172,22 @@ def test_run_drives_a_workspace_with_no_verticals_to_completion(
 def test_doctor_reports_each_pinned_tool() -> None:
     result = runner.invoke(app, ["doctor"])
     assert "nmap: pinned" in result.output
+
+
+def test_skill_lint_reports_clean_against_the_real_skills_dir() -> None:
+    result = runner.invoke(app, ["skill", "lint"])
+    assert result.exit_code == 0
+    assert "clean" in result.output
+
+
+def test_skill_lint_fails_on_a_description_missing_the_routing_contract(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / "injection"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: injection\nrequired: true\ndescription: Probes for injection.\n---\nBody.\n"
+    )
+
+    result = runner.invoke(app, ["skill", "lint", "--skills-dir", str(skills_dir)])
+    assert result.exit_code == 1
+    assert "use when" in result.output

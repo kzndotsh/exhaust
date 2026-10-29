@@ -57,3 +57,5 @@ jobs:
         run: uv run lint-imports
       - name: Check vertical catalog
         run: uv run exhaust catalog check
+      - name: Lint skill files
+        run: uv run exhaust skill lint

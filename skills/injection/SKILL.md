@@ -5,10 +5,10 @@ description: >
   Probes every discovered input for command, SQL, LDAP, template
   (SSTI), header/CRLF, and NoSQL injection by submitting a canonical
   boundary-breaking payload per class and diffing the observed response
-  against a clean baseline. Use for any Workspace once recon has
-  enumerated at least one request-shaped input (form field, query
-  parameter, header, cookie, path segment, or uploaded filename). Do
-  not use for deserialization of structured payloads (pickle, YAML,
+  against a clean baseline. Use when recon has enumerated at least one
+  request-shaped input (form field, query parameter, header, cookie,
+  path segment, or uploaded filename) on any Workspace. Do not use for
+  deserialization of structured payloads (pickle, YAML,
   XML, Java-object streams) — that's the `deserialization` vertical;
   this one is for payloads interpreted as code or query syntax, never
   payloads reconstructed as a data structure.
@@ -102,23 +102,8 @@ enough to be worth deferring from every other turn's context.
 
 ## Known gaps
 
-`curl` (`src/exhaust/rig/wrappers/curl.py`, ADR 0027) submits GET query
-parameters (`curl.get`) and POST form fields (`curl.post_form`), so
-steps 2 through 5 above now have a real Rig method to dispatch
-through for any input shaped as a query parameter or form field. Both
-methods are `required_extent="full"` and `consequential=True` (ADR
-0023, ADR 0024): a Workspace can only run them against a real Target
-once a human has approved the specific call, same as any other
-consequential method.
-
-Two input shapes from step 1's enumeration still have no Rig method:
-headers and cookies (`curl.get`/`curl.post_form` carry only query
-parameters and form fields, nothing that sets a request header) and
-uploaded-filename injection (no multipart/file-upload method is
-pinned). Path-segment injection also has no dedicated method yet; it
-can only be tested today by folding the payload into the `url`
-argument itself, which `curl.get`'s own URL-shape validation may
-reject depending on the payload's characters. Treat an input that
-falls into one of these three shapes as blocked for now, the same way
-the whole vertical was blocked before this tool was pinned — name it
-in the run's own notes rather than skipping it silently.
+`curl.get`/`curl.post_form` (ADR 0027) dispatch steps 2 through 5 for
+query-parameter and form-field inputs. Header/cookie inputs,
+uploaded-filename inputs, and path-segment inputs have no Rig method
+yet: treat those as blocked, name them in the run's own notes, and
+don't skip them silently. See ADR 0027 for why.

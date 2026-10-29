@@ -43,5 +43,9 @@ layers:
 catalog:
     uv run exhaust catalog check
 
+# The structural checks catalog check's schema can't make (skills-system spec §6).
+skill-lint:
+    uv run exhaust skill lint
+
 # Every gate CI runs, in CI's order.
-check: lint docstrings types test layers catalog
+check: lint docstrings types test layers catalog skill-lint
