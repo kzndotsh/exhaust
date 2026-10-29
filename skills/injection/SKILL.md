@@ -44,7 +44,7 @@ explains.
    filename the Target exposes is a candidate. An input not on this
    list before step 2 starts MUST NOT be probed — do not discover and
    test in the same pass, since an untracked input makes the Exit
-   condition below unverifiable. Dispatch per input shape (ADR 0027):
+   condition below unverifiable. Dispatch per input shape:
    `curl.get` for query parameters and, via its `path_segment`
    parameter, path segments; `curl.post_form` for form fields; either
    method's `headers` parameter for header and cookie inputs;
@@ -99,8 +99,8 @@ explains.
    MUST NOT record a non-diff as "tested clean" without the recorded
    baseline it was compared against.
 5. MUST escalate only a confirmed diff, one payload class at a time,
-   far enough to produce Oracle-checkable evidence (ADR 0008) before
-   writing a Finding. MUST NOT escalate a class that produced no diff
+   far enough to produce Oracle-checkable evidence before writing a
+   Finding. MUST NOT escalate a class that produced no diff
    in step 4 on the theory that a stronger payload might still work —
    that belongs in a later recon-informed pass, not this one.
 
@@ -110,14 +110,14 @@ explains.
 - [ ] Every enumerated input has been probed against every payload
       class applicable to its context (step 3).
 - [ ] Every candidate diff recorded in step 4 is closed as exactly one
-      of: **confirmed** (Oracle-backed, ADR 0008, never this
-      vertical's own self-report), **ruled out** (the specific,
-      named reason the diff isn't a real signal — e.g. "timing delta
-      within normal response-time variance, confirmed by re-baselining
-      three times" — not just "looked clean"), or **open proof gap**,
-      recorded as `needs_confirmation` with its `requirements` (ADR
-      0019). A candidate dropped without landing in one of these three
-      is this vertical stopping early, not exhausting itself.
+      of: **confirmed** (Oracle-backed, never this vertical's own
+      self-report), **ruled out** (the specific, named reason the diff
+      isn't a real signal — e.g. "timing delta within normal
+      response-time variance, confirmed by re-baselining three
+      times" — not just "looked clean"), or **open proof gap**,
+      recorded as `needs_confirmation` with its `requirements`. A
+      candidate dropped without landing in one of these three is this
+      vertical stopping early, not exhausting itself.
 
 ## Rationalizations to reject
 
@@ -137,18 +137,6 @@ explains.
   closed." — One canonical payload only rules out the most obvious
   form of that class. Close it as **ruled out** with the specific
   reason (step 4's non-diff plus why), never as a silent non-finding.
-
-## Sub-cases
-
-Command, SQL, LDAP, XPath, SSTI, header/CRLF, and NoSQL injection are
-kept inline above rather than split into `references/` files: none of
-them yet has enough Target-specific nuance to outgrow a few lines in
-this file, and splitting now would cost a lookup for no actual context
-savings (ADR 0013's progressive disclosure is a cost tradeoff, not a
-default). Split one out into its own `references/<name>.md` the first
-time its procedure needs engine-specific detail (e.g. a payload table
-keyed on which SQL dialect or templating engine recon identified) long
-enough to be worth deferring from every other turn's context.
 
 ## References
 

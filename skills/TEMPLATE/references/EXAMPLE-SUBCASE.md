@@ -7,11 +7,10 @@ content, when a real sub-case actually needs splitting out — don't
 leave this example sitting in a real vertical's references/ directory.
 
 A reference file has no YAML frontmatter of its own: the Playbook
-catalog generator never reads it directly (ADR 0016, ADR 0013's
-progressive disclosure), only the owning vertical's SKILL.md body
-decides when to point here. It loads only when the agent actually
-reaches this specific sub-case, not on every turn of the parent
-vertical the way SKILL.md's own body does.
+catalog generator never reads it directly, only the owning vertical's
+SKILL.md body decides when to point here. It loads only when the agent
+actually reaches this specific sub-case, not on every turn of the
+parent vertical the way SKILL.md's own body does.
 -->
 
 # REPLACE_ME sub-case name

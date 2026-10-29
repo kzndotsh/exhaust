@@ -102,6 +102,22 @@ def test_naming_a_real_pinned_tool_and_method_is_clean(tmp_path: Path) -> None:
     assert lint_skills(skills_dir) == []
 
 
+def test_citing_an_adr_by_number_is_an_error(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", body="Record it per ADR 0008 before writing a Finding.\n")
+
+    findings = lint_skills(skills_dir)
+    assert any("ADR 0008" in f.message and f.severity == "error" for f in findings)
+
+
+def test_citing_an_adr_with_a_hyphen_is_also_caught(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", body="See ADR-0019 for the requirements shape.\n")
+
+    findings = lint_skills(skills_dir)
+    assert any("ADR-0019" in f.message and f.severity == "error" for f in findings)
+
+
 def test_a_directory_slug_mismatched_from_the_declared_name_is_a_warning(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
     skill_dir = skills_dir / "01-injection"

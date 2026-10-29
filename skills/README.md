@@ -43,17 +43,24 @@ locked.
    tool call the Rig doesn't register. Use capitalized MUST/MUST
    NOT/SHOULD/MAY (RFC 2119) inside Procedure and Exit condition only,
    and render Exit condition as a checklist once more than one
-   independent condition closes it. See
+   independent condition closes it. Never cite an ADR by number
+   anywhere in the body — the investigating agent reads this file
+   mid-run, not a human author, and a design-rationale pointer is
+   explanation it has no use for; state the rule itself. A section
+   with nothing left to say once stripped of explanation (no sub-case
+   split out yet, nothing currently blocked) gets deleted entirely,
+   never filled with prose justifying why it's empty. See
    `docs/research/2026-10-29-procedural-writing-standards.md` for why
    each of these conventions earned a place in the template.
 5. Run `uv run exhaust catalog generate && uv run exhaust catalog check
-   && uv run exhaust skill lint`. One vertical per PR.
+   && uv run exhaust skill lint`. The last of these fails the build on
+   any ADR citation or other lint violation. One vertical per PR.
 
-`skills/injection/SKILL.md` is a worked example of steps 1 through 3
-and the `Known gaps` discipline (written honestly rather than papered
-over: no Rig tool currently submits a payload to a Target, so most of
-its procedure was blocked on a tool that isn't pinned yet). It
-predates the RFC 2119 keyword, checklist Exit condition, and
-Rationalizations-to-reject conventions `skills/TEMPLATE/SKILL.md` now
-specifies — retrofitting it is a separate, deliberate pass, not
-something to do piecemeal while writing the next vertical.
+`skills/injection/SKILL.md` is a worked example of the full template:
+seven inline sub-cases, a checklist Exit condition with the
+confirmed/ruled-out/open-proof-gap closure rule, a Rationalizations to
+reject section, and a diversified References list (MITRE CWE entries
+alongside PortSwigger's own testing guides, not one vendor for
+everything). It has no Known gaps section because every input shape
+its own enumeration step names now has a real Rig method to dispatch
+through.

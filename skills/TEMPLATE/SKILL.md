@@ -39,10 +39,12 @@ at a glance.
 
 One or two sentences. State the trust boundary or bug class this
 vertical exists to find. No history, no rationale, no "we chose this
-because" — that belongs in an ADR, never here (Diátaxis names mixing
+because," and no citation of the design-rationale doc that explains
+why — that belongs elsewhere, never here (Diátaxis names mixing
 explanation into a how-to as a real anti-pattern, not a style
-preference; this session's own "Known gaps" section got trimmed for
-exactly this mistake).
+preference). Skill files are never the place to name a project's own
+internal decision records by number; cite the rule itself, not the
+document that explains why it exists.
 
 ## Procedure
 
@@ -82,11 +84,11 @@ research pass):
       baseline (step 2).
 - [ ] REPLACE_ME: the vertical-specific closing conditions.
 - [ ] Every candidate this vertical opened is closed as exactly one
-      of: **confirmed** (Oracle-backed, ADR 0008, never the agent's
-      own self-report), **ruled out** (name the specific control that
+      of: **confirmed** (Oracle-backed, never the agent's own
+      self-report), **ruled out** (name the specific control that
       blocks every reachable path to the sink — not just "looked
       safe"), or **open proof gap**, recorded as `needs_confirmation`
-      with its `requirements` (ADR 0019). A candidate dropped without
+      with its `requirements`. A candidate dropped without
       landing in one of these three is this vertical stopping early,
       not exhausting itself (usestrix/strix's closure discipline:
       "silently dropping an uncertain candidate is mislabelling an
@@ -114,15 +116,18 @@ inline what every sub-case needs, push behind a `references/` pointer
 only what just one sub-case reaches (Matt Pocock's writing-for-agents
 skill: progressive disclosure is hierarchy protection, not a token
 optimization — split when a sub-case needs detail no other branch
-does, not pre-emptively). Delete this section if there are none yet.
+does, not pre-emptively). If nothing has been split out yet, delete
+this whole section — don't fill it with prose explaining why nothing
+has been split out, which is explanation an agent gets no use from.
 
 ## Known gaps
 
-State fact and required action only: what's blocked, what to do about
-it (name it in the run's own notes, never skip silently), and which
-ADR explains why. No alternatives considered, no backstory — that's
-explanation, and explanation belongs in the ADR, not in a file this
-vertical's own turn re-reads every time it runs.
+State fact and required action only: what's blocked and what to do
+about it (name it in the run's own notes, never skip silently). No
+alternatives considered, no backstory, no pointer to the design doc
+that explains why — that's explanation, and explanation belongs
+elsewhere, not in a file this vertical's own turn re-reads every time
+it runs. Delete this section if nothing is currently blocked.
 
 ## References
 

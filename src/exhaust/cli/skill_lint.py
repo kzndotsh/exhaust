@@ -6,11 +6,15 @@ construction: generation itself fails on a malformed file. This module
 is the second pass the skills-system spec names
 (`docs/artifacts/2026-10-29-skills-system-spec.md` §6): checks that are
 structural, not type-level, so a schema-valid file can still fail them.
-Four checks, each catching a distinct failure mode: a `description`
+Five checks, each catching a distinct failure mode: a `description`
 missing one of ADR 0017's two routing-contract clauses, a
 `references/` file nothing in the body ever points to, a procedure
-naming a Rig tool or method that isn't actually pinned, and a directory
-slug that doesn't match its own front matter's `name`.
+naming a Rig tool or method that isn't actually pinned, a directory
+slug that doesn't match its own front matter's `name`, and a design-
+rationale doc (an ADR) cited by number in the body — a skill file is
+read by the investigating agent mid-run, not a human author, and an
+ADR number is a pointer to explanation the agent has no use for
+(AGENTS.md's "Vertical skill files" section).
 """
 
 import re
@@ -33,6 +37,7 @@ app = typer.Typer(name="skill", no_args_is_help=True)
 _SLUG_PATTERN = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")
 _REFERENCE_MENTION_PATTERN = re.compile(r"references/([\w\-./]+\.md)")
 _TOOL_METHOD_PATTERN = re.compile(r"`([a-z][a-z0-9_-]*)\.([a-z][a-z0-9_]*)`")
+_ADR_MENTION_PATTERN = re.compile(r"\bADR[\s-]?\d{4}\b")
 
 
 @dataclass(frozen=True)
@@ -116,6 +121,19 @@ def _tool_drift_findings(skill_file: Path, body: str) -> list[LintFinding]:
     return findings
 
 
+def _adr_mention_findings(skill_file: Path, body: str) -> list[LintFinding]:
+    matches = {match.group(0) for match in _ADR_MENTION_PATTERN.finditer(body)}
+    return [
+        LintFinding(
+            skill_file,
+            f"cites {mention} by number; state the rule itself, never the design-rationale "
+            "doc that explains why it exists",
+            "error",
+        )
+        for mention in sorted(matches)
+    ]
+
+
 def _slug_findings(skill_dir: Path, declared_name: str) -> list[LintFinding]:
     slug = skill_dir.name
     findings: list[LintFinding] = []
@@ -168,6 +186,7 @@ def lint_skills(skills_dir: Path) -> list[LintFinding]:
         findings.extend(_description_findings(skill_file, entry.description))
         findings.extend(_orphaned_reference_findings(skill_file.parent, body))
         findings.extend(_tool_drift_findings(skill_file, body))
+        findings.extend(_adr_mention_findings(skill_file, body))
         findings.extend(_slug_findings(skill_file.parent, declared_name))
 
     return findings
