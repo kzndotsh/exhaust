@@ -309,6 +309,16 @@ escalated or explicitly dismissed with the reason") is checkable (clear) and exh
 (high-demand) by this vocabulary's own test, which is a second, independent confirmation of the
 same soundness the WHO checklist comparison already found in §3.
 
+## 8. `pbakaus/impeccable` — inline rule-ID tagging as a working alternative to keyword conventions
+
+Source: a delegated subagent's direct read of `skill/SKILL.src.md` in `github.com/pbakaus/impeccable` (cloned locally this session; see `docs/research/2026-10-28-agent-skills-ecosystem-audit.md` for the rest of that audit, which this section complements rather than duplicates).
+
+This project solves the "which sentences are binding instructions versus narrative framing" problem — the same one RFC 2119 solves with capitalized keywords — a completely different way: every normative sentence carries an inline HTML-comment rule ID (`<!-- rule:skill-brief-wins -->`, `<!-- rule:skill-setup-context -->`), apparently so downstream tooling (tests, validation) can reference one specific rule by a stable identifier distinct from its prose. A direct grep for MUST/SHOULD/SHALL across the file found exactly one incidental hit, not a keyword pattern — this project deliberately doesn't use RFC 2119's convention, or anything EARS-shaped, and still has a real, working answer to the same problem.
+
+Representative lines, quoted verbatim: "The brief wins. Honor pinned aesthetics, eras, materials, fonts, and palettes even when they conflict with a saturated-pattern warning. Redirecting a clear brief toward your taste is failure." and "Never repair drift as a side effect of a design task. A `CONTEXT_STALE` finding is reported, not acted on, unless the user asks." Both are plain declarative/imperative English, each paired with its own rule-ID comment.
+
+**What this changes, if anything**: it doesn't argue against adopting RFC 2119 capitalization in exhaust's own Procedure/Exit-condition steps (finding 1 above still stands on its own evidence). It does argue against treating RFC 2119 as the *only* legitimate way to mark a binding instruction. The ID-tagging approach has a property RFC 2119 doesn't: a specific rule becomes independently referenceable (by a test, by a lint check, by a cross-reference from another vertical's procedure) without quoting or paraphrasing its prose. The separate Agent Skills ecosystem audit (`docs/research/2026-10-28-agent-skills-ecosystem-audit.md`'s closing deltas) already names a `skill-rules.test.mjs`-style regression test, pinning a hand-written sentence against silent loss, as worth considering; if that gets built, an ID-comment convention is a more precise anchor to pin against than grepping for the sentence's own text, which breaks the moment the wording is edited for clarity.
+
 ## Summary of concrete deltas against the current spec/injection file
 
 | # | Finding | Confirms or changes? |
@@ -320,6 +330,7 @@ same soundness the WHO checklist comparison already found in §3.
 | 5 | ISO/regulatory SOP structure | **Not confirmed.** Both candidate primary sources failed to extract as text in this environment; stated as an open gap rather than guessed. |
 | 6 | EARS: fixed trigger-clause templates (When/While/Where/If-Then), temporal clause order | **New, additive**: a `gate` string's shape isn't checked today; once real gated verticals get written, hold each `gate` to an EARS When/While/If-Then shape and lint the keyword. Doesn't apply to `Procedure` steps — EARS states requirements, not actions. |
 | 7 | Matt Pocock's `writing-for-agents`: context load vs. cognitive load, disclosure-as-hierarchy-protection, negation as a named failure mode | **Confirms** injection's Sub-cases decision and its one prohibition's positive pairing independently; **directly answers** the still-open `disable-model-invocation`-equivalent question from the Agent Skills audit with a concrete decision rule, worth citing when that question is actually decided. |
+| 8 | `pbakaus/impeccable`: inline `<!-- rule:ID -->` tagging as a non-keyword way to mark binding sentences | **New, additive, not a competing claim against finding 1.** Worth adopting only if/when a sentence-level pinning mechanism (the `skill-rules.test.mjs`-style check named in the Agent Skills audit's own deltas) actually gets built — a more precise anchor than grepping prose. |
 
 ## Sources fetched this session
 
@@ -337,6 +348,7 @@ same soundness the WHO checklist comparison already found in §3.
 - <https://alistairmavin.com/ears/>
 - <https://en.wikipedia.org/wiki/Easy_Approach_to_Requirements_Syntax> (cross-reference only, not the primary claim)
 - `writing-for-agents/SKILL.md` and `SKILL-MECHANICS.md`, `mattpocock-skills` plugin v1.3.1, cached locally, upstream `github.com/mattpocock/skills` — not a web fetch, but a real, installed, versioned source read in full
+- `skill/SKILL.src.md`, `github.com/pbakaus/impeccable` — cloned locally and read by a delegated subagent; see `docs/research/2026-10-28-agent-skills-ecosystem-audit.md` for the rest of that repository's audit
 
 ## Sources attempted and not usable (stated explicitly, not substituted)
 
