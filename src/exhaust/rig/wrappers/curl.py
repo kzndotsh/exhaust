@@ -51,6 +51,20 @@ _VERSION_PATTERN = re.compile(r"^curl (\S+)", re.MULTILINE)
 _REQUEST_TIMEOUT_S = 30.0
 _VERSION_TIMEOUT_S = 10.0
 
+# A plain curl invocation sends 'User-Agent: curl/<version>' and no Accept header
+# at all — one of the cheapest, most common signals a Target's bot-detection
+# checks for, confounding "blocked as a non-browser client" with "not vulnerable"
+# (lwthiker/curl-impersonate's own stated motivation, audited 2026-10-29). This
+# is a browser-shaped header set only, not TLS/HTTP2 fingerprint parity: that
+# needs curl built against a different TLS library entirely and is a separate,
+# bigger decision this bridge doesn't make on its own.
+_DEFAULT_HEADERS: tuple[str, ...] = (
+    "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language: en-US,en;q=0.9",
+)
+
 
 @dataclass(frozen=True)
 class CurlBridge:
@@ -116,12 +130,17 @@ class CurlBridge:
         return self._invoke(argv)
 
     def _invoke(self, argv: list[str]) -> ToolResult:
+        header_args: list[str] = []
+        for header in _DEFAULT_HEADERS:
+            header_args.extend(["-H", header])
+
         full_argv = [
             str(self.executable),
             "-s",
             "-S",
             "--max-time",
             str(int(_REQUEST_TIMEOUT_S)),
+            *header_args,
             *argv,
         ]
         try:

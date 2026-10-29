@@ -60,6 +60,14 @@ def test_post_form_sends_each_field_as_its_own_data_urlencode_token(tmp_path: Pa
     )
 
 
+def test_every_request_carries_browser_shaped_default_headers(tmp_path: Path) -> None:
+    bridge = CurlBridge(executable=_fake_curl(tmp_path))
+    result = bridge.run("get", url="http://target.example/")
+    assert "-H User-Agent: Mozilla/5.0" in result.output
+    assert "-H Accept: text/html" in result.output
+    assert "-H Accept-Language: en-US" in result.output
+
+
 def test_a_nonzero_exit_is_reported_as_not_ok(tmp_path: Path) -> None:
     bridge = CurlBridge(executable=_fake_curl(tmp_path, exit_code=1))
     result = bridge.run("get", url="http://target.example/")
