@@ -26,20 +26,20 @@ Target's behavior changes in a way only that interpretation explains.
 
 ## Procedure
 
-1. **Enumerate inputs before touching any of them.** Every form field,
-   query parameter, header, cookie, path segment, and upload filename
-   the Target exposes is a candidate. An input not on this list before
-   step 2 starts doesn't get probed — don't discover and test in the
-   same pass, since an untracked input makes the exit condition in
-   this file unverifiable.
-2. **Baseline every input first.** Submit each input's own normal,
-   well-formed value and record the response: status code, timing,
-   body length, and any error text verbatim. Every later diff in this
-   procedure is measured against this baseline, not against an assumed
-   "should have succeeded" response.
-3. **Probe each input with one canonical payload per applicable
-   class**, boundary-breaking rather than exploit-complete (the goal
-   at this stage is detecting a behavior diff, not achieving code
+1. MUST enumerate every input before touching any of them. Every form
+   field, query parameter, header, cookie, path segment, and upload
+   filename the Target exposes is a candidate. An input not on this
+   list before step 2 starts MUST NOT be probed — do not discover and
+   test in the same pass, since an untracked input makes the Exit
+   condition below unverifiable.
+2. MUST record a baseline for every input first: submit each input's
+   own normal, well-formed value and record the response (status code,
+   timing, body length, and any error text verbatim). Every later diff
+   in this procedure is measured against this baseline, never against
+   an assumed "should have succeeded" response.
+3. MUST probe each input with one canonical payload per applicable
+   class, boundary-breaking rather than exploit-complete (the goal at
+   this stage is detecting a behavior diff, not achieving code
    execution or data exfiltration in the same request):
    - **Command injection**: a shell metacharacter sequence that would
      execute a harmless, uniquely-identifiable command if interpreted
@@ -63,30 +63,53 @@ Target's behavior changes in a way only that interpretation explains.
      equivalent for the Target's actual NoSQL engine, once recon has
      identified which one) that would alter query logic if the input
      reaches a NoSQL query unescaped.
-4. **Diff against baseline, not against expectation.** A probe is
-   interesting only when its response differs from that same input's
-   own baseline in a way the payload's mechanism specifically predicts
-   (a timing delay for a sleep-based SQL probe, a reflected sentinel
-   for command injection, a distinctive evaluated value for SSTI).
-   Record every interesting diff as a candidate; do not record a
-   non-diff as "tested clean" without the recorded baseline it was
-   compared against.
-5. **Escalate only a confirmed diff**, one payload class at a time, far
-   enough to produce Oracle-checkable evidence (ADR 0008) before
-   writing a Finding. Never escalate a class that produced no diff in
-   step 4 on the theory that a stronger payload might still work; that
-   belongs in a later recon-informed pass, not this one.
+4. MUST diff against the recorded baseline, never against expectation.
+   A probe is interesting only when its response differs from that
+   same input's own baseline in a way the payload's mechanism
+   specifically predicts (a timing delay for a sleep-based SQL probe,
+   a reflected sentinel for command injection, a distinctive evaluated
+   value for SSTI). MUST record every interesting diff as a candidate;
+   MUST NOT record a non-diff as "tested clean" without the recorded
+   baseline it was compared against.
+5. MUST escalate only a confirmed diff, one payload class at a time,
+   far enough to produce Oracle-checkable evidence (ADR 0008) before
+   writing a Finding. MUST NOT escalate a class that produced no diff
+   in step 4 on the theory that a stronger payload might still work —
+   that belongs in a later recon-informed pass, not this one.
 
 ## Exit condition
 
-Every enumerated input (step 1) has a recorded baseline (step 2) and
-has been probed against every payload class applicable to its context
-(step 3), and every diff recorded in step 4 has either been escalated
-to a Finding or explicitly dismissed with the reason it isn't a real
-signal (e.g. a timing diff within normal response-time variance). A
-vertical that stops before every enumerated input has a recorded
-baseline and probe result has not exhausted this vertical; it's
-stopped early.
+- [ ] Every input enumerated in step 1 has a recorded baseline (step 2).
+- [ ] Every enumerated input has been probed against every payload
+      class applicable to its context (step 3).
+- [ ] Every candidate diff recorded in step 4 is closed as exactly one
+      of: **confirmed** (Oracle-backed, ADR 0008, never this
+      vertical's own self-report), **ruled out** (the specific,
+      named reason the diff isn't a real signal — e.g. "timing delta
+      within normal response-time variance, confirmed by re-baselining
+      three times" — not just "looked clean"), or **open proof gap**,
+      recorded as `needs_confirmation` with its `requirements` (ADR
+      0019). A candidate dropped without landing in one of these three
+      is this vertical stopping early, not exhausting itself.
+
+## Rationalizations to reject
+
+- "The response was 200 OK, so nothing happened." — A 200 is the
+  baseline for blind and time-based injection; MUST check timing and
+  body-length diffs against the recorded baseline before ruling a
+  class out, not just the status code.
+- "The error page didn't mention SQL, so it's probably not a SQL
+  sink." — Generic/custom error pages are the common case, not the
+  exception; a boolean-logic diff (`'1'='1` vs `'1'='2`) still proves
+  the sink exists with no error text at all.
+- "This input is probably sanitized upstream, I'll skip it." —
+  Upstream sanitization is a hypothesis, not a recorded baseline. MUST
+  probe every enumerated input per step 3 regardless of where
+  sanitization is assumed to live.
+- "One payload per class didn't trigger anything, so this class is
+  closed." — One canonical payload only rules out the most obvious
+  form of that class. Close it as **ruled out** with the specific
+  reason (step 4's non-diff plus why), never as a silent non-finding.
 
 ## Sub-cases
 
