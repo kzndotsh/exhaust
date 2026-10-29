@@ -1,3 +1,9 @@
 {
-  "verticals": []
+  "verticals": [
+    {
+      "gate": null,
+      "name": "injection",
+      "required": true
+    }
+  ]
 }

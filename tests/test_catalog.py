@@ -28,6 +28,15 @@ def test_missing_skills_dir_yields_empty_catalog(tmp_path: Path) -> None:
     assert discover_verticals(tmp_path / "does-not-exist") == []
 
 
+def test_template_directory_is_excluded(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "TEMPLATE", "name: REPLACE_ME\nrequired: true\n")
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+
+    entries = discover_verticals(skills_dir)
+    assert entries == [VerticalEntry(name="injection", required=True, gate=None)]
+
+
 def test_required_vertical_with_no_gate(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
     _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")

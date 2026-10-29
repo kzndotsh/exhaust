@@ -19,6 +19,9 @@ import yaml
 SKILL_FILENAME = "SKILL.md"
 DEFAULT_OUTPUT_RELATIVE_PATH = Path("catalog") / "verticals.generated.json"
 
+TEMPLATE_DIRECTORY_NAME = "TEMPLATE"
+"""The scaffold directory a new vertical is copied from, never a real one."""
+
 
 class MalformedSkillFileError(ValueError):
     """A skill file's front matter doesn't satisfy ADR 0011's schema."""
@@ -175,6 +178,8 @@ def discover_verticals(skills_dir: Path) -> list[VerticalEntry]:
 
     entries: list[VerticalEntry] = []
     for skill_file in sorted(skills_dir.glob(f"*/{SKILL_FILENAME}")):
+        if skill_file.parent.name == TEMPLATE_DIRECTORY_NAME:
+            continue
         data = _parse_front_matter(skill_file.read_text(), skill_file)
         entries.append(_entry_from_front_matter(data, skill_file))
 
