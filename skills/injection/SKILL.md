@@ -2,7 +2,7 @@
 name: injection
 required: true
 description: >
-  Probes every discovered input for command, SQL, LDAP, template
+  Probes every discovered input for command, SQL, LDAP, XPath, template
   (SSTI), header/CRLF, and NoSQL injection by submitting a canonical
   boundary-breaking payload per class and diffing the observed response
   against a clean baseline. Use when recon has enumerated at least one
@@ -20,6 +20,7 @@ keywords:
   - SSTI
   - server-side template injection
   - LDAP injection
+  - XPath injection
   - NoSQL injection
   - CRLF injection
   - header injection
@@ -29,11 +30,12 @@ keywords:
 
 Whether any input the Target accepts crosses from data into an
 interpreter's syntax: a shell, a SQL/NoSQL query engine, an LDAP
-filter, a template engine, or an HTTP header parser reading past the
-line it should stop at. The shared mechanism across every sub-case
-below is the same: find a boundary character or sequence the target
-interpreter treats specially, submit it, and check whether the
-Target's behavior changes in a way only that interpretation explains.
+filter, an XPath expression, a template engine, or an HTTP header
+parser reading past the line it should stop at. The shared mechanism
+across every sub-case below is the same: find a boundary character or
+sequence the target interpreter treats specially, submit it, and check
+whether the Target's behavior changes in a way only that interpretation
+explains.
 
 ## Procedure
 
@@ -55,7 +57,11 @@ Target's behavior changes in a way only that interpretation explains.
    - **Command injection**: a shell metacharacter sequence that would
      execute a harmless, uniquely-identifiable command if interpreted
      (e.g. a sentinel string echoed back) if the input reaches a shell
-     at all.
+     at all. Covers both CWE-78 variants: input appended as an
+     argument to a fixed command (the metacharacter sequence above),
+     and input that selects the entire command (probe by submitting a
+     harmless, identifiable command name as the input's whole value
+     and checking whether it runs).
    - **SQL injection**: a single-quote/boolean-logic pair (`' OR '1'='1`
      and `' AND '1'='2`) compared against each other and against
      baseline — a real SQL sink flips behavior between the two; a
@@ -63,6 +69,11 @@ Target's behavior changes in a way only that interpretation explains.
    - **LDAP injection**: an LDAP filter metacharacter (`*`, `)`, `(`)
      that would widen or break a filter if the input reaches an LDAP
      query unescaped.
+   - **XPath injection**: a boolean-logic pair shaped like
+     `' or ''='` compared against a baseline value, the same
+     mechanism as the SQL probe above but against an XPath expression
+     (CWE-643) — a real XPath sink returns a different, wider result
+     set than the baseline; a false positive returns the same result.
    - **Template injection (SSTI)**: a template-engine expression
      (e.g. `{{7*7}}`-shaped, adapted to whatever templating syntax the
      Target's stack uses once that's known) that evaluates to a
@@ -124,10 +135,10 @@ Target's behavior changes in a way only that interpretation explains.
 
 ## Sub-cases
 
-Command, SQL, LDAP, SSTI, header/CRLF, and NoSQL injection are kept
-inline above rather than split into `references/` files: none of them
-yet has enough Target-specific nuance to outgrow a few lines in this
-file, and splitting now would cost a lookup for no actual context
+Command, SQL, LDAP, XPath, SSTI, header/CRLF, and NoSQL injection are
+kept inline above rather than split into `references/` files: none of
+them yet has enough Target-specific nuance to outgrow a few lines in
+this file, and splitting now would cost a lookup for no actual context
 savings (ADR 0013's progressive disclosure is a cost tradeoff, not a
 default). Split one out into its own `references/<name>.md` the first
 time its procedure needs engine-specific detail (e.g. a payload table
@@ -147,6 +158,7 @@ don't skip them silently. See ADR 0027 for why.
 - MITRE CWE-89, SQL Injection: <https://cwe.mitre.org/data/definitions/89.html>
 - MITRE CWE-78, OS Command Injection: <https://cwe.mitre.org/data/definitions/78.html>
 - MITRE CWE-90, LDAP Injection: <https://cwe.mitre.org/data/definitions/90.html>
+- MITRE CWE-643, XPath Injection: <https://cwe.mitre.org/data/definitions/643.html>
 - MITRE CWE-1336, Server-Side Template Injection: <https://cwe.mitre.org/data/definitions/1336.html>
 - MITRE CWE-943, NoSQL Injection: <https://cwe.mitre.org/data/definitions/943.html>
 - MITRE CWE-93, CRLF Injection: <https://cwe.mitre.org/data/definitions/93.html>

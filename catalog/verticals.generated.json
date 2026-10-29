@@ -1,7 +1,7 @@
 {
   "verticals": [
     {
-      "description": "Probes every discovered input for command, SQL, LDAP, template (SSTI), header/CRLF, and NoSQL injection by submitting a canonical boundary-breaking payload per class and diffing the observed response against a clean baseline. Use when recon has enumerated at least one request-shaped input (form field, query parameter, header, cookie, path segment, or uploaded filename) on any Workspace. Do not use for deserialization of structured payloads (pickle, YAML, XML, Java-object streams) \u2014 that's the `deserialization` vertical; this one is for payloads interpreted as code or query syntax, never payloads reconstructed as a data structure.\n",
+      "description": "Probes every discovered input for command, SQL, LDAP, XPath, template (SSTI), header/CRLF, and NoSQL injection by submitting a canonical boundary-breaking payload per class and diffing the observed response against a clean baseline. Use when recon has enumerated at least one request-shaped input (form field, query parameter, header, cookie, path segment, or uploaded filename) on any Workspace. Do not use for deserialization of structured payloads (pickle, YAML, XML, Java-object streams) \u2014 that's the `deserialization` vertical; this one is for payloads interpreted as code or query syntax, never payloads reconstructed as a data structure.\n",
       "gate": null,
       "keywords": [
         "SQLi",
@@ -11,6 +11,7 @@
         "SSTI",
         "server-side template injection",
         "LDAP injection",
+        "XPath injection",
         "NoSQL injection",
         "CRLF injection",
         "header injection"
