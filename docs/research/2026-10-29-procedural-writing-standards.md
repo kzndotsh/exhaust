@@ -6,10 +6,11 @@ re-reads every turn. Rather than keep improvising the house style for vertical s
 by trial and error, this doc checks it against fields that have already solved "how do you
 write a procedure a person or system can execute reliably, with no missed steps and no
 ambiguity": IETF requirement-level language, the Diátaxis documentation framework, checklist
-design in medicine and aviation, and SRE runbook/troubleshooting convention. Every claim below
-is cited to a primary source actually fetched this session (2026-10-29), with the exact
-passage quoted. Where a source couldn't be fetched or confirmed, that's stated plainly instead
-of guessed.
+design in medicine and aviation, SRE runbook/troubleshooting convention, the EARS requirements-syntax
+templates, and a working agent-prompt-engineering practitioner's own distilled reference for
+writing documents agents consume. Every claim below is cited to a primary source actually
+fetched this session (2026-10-29), with the exact passage quoted. Where a source couldn't be
+fetched or confirmed, that's stated plainly instead of guessed.
 
 Findings are checked against `skills/injection/SKILL.md`'s actual current structure (What
 this vertical investigates / Procedure / Exit condition / Sub-cases / Known gaps) and against
@@ -198,6 +199,116 @@ confirmed in this research pass.** If this convention is needed later, re-run th
 environment with PDF text extraction, or locate an HTML-rendered edition of one of these
 guidance documents.
 
+## 6. EARS (Easy Approach to Requirements Syntax) — trigger-first requirement templates
+
+Sources: <https://alistairmavin.com/ears/> (the format's originator's own site, fetched live)
+and <https://en.wikipedia.org/wiki/Easy_Approach_to_Requirements_Syntax> (checked as a
+cross-reference, not the primary claim). EARS was developed at Rolls-Royce (Alistair Mavin and
+colleagues) analysing airworthiness regulations for a jet engine control system, first
+published at IEEE RE'09.
+
+EARS fixes a small set of templates, each naming its clauses in a fixed temporal order
+(precondition, then trigger, then system, then response), confirmed from the originator's own
+site:
+
+- **Ubiquitous** (no keyword — always active): "The `<system name>` shall `<system
+  response>`"
+- **State-driven** (*While*): "While `<precondition(s)>`, the `<system name>` shall `<system
+  response>`"
+- **Event-driven** (*When*): "When `<trigger>`, the `<system name>` shall `<system
+  response>`"
+- **Optional feature** (*Where*): "Where `<feature is included>`, the `<system name>` shall
+  `<system response>`"
+- **Unwanted behaviour** (*If...Then*): "If `<trigger>`, then the `<system name>` shall
+  `<system response>`"
+- **Complex** (two or more keywords combined): "While `<precondition(s)>`, When `<trigger>`,
+  the `<system name>` shall `<system response>`"
+
+The originator's site states the clause order is fixed "following temporal logic," and that
+keywords were chosen to match ordinary English usage specifically so authors find them
+intuitive rather than needing to learn new vocabulary. Each requirement has zero-or-more
+preconditions, zero-or-one trigger, exactly one system name, and one-or-more responses — a
+closed shape, not free prose.
+
+**Direct relevance to exhaust's own schema**: a Playbook vertical's `gate` field (ADR 0011,
+`required: false` + a `gate` string) is structurally an EARS State-driven or Event-driven
+precondition/trigger clause with no fixed syntax enforced on it today. `skills/injection/SKILL.md`
+has no `gate` (it's `required: true`), but the reserved gated verticals in
+`docs/artifacts/2026-10-26-playbook-proposal.md` §4 (e.g. "A confirmed `/graphql`-equivalent
+endpoint responding to an introspection probe") are already *written* in something close to
+EARS's own When-clause shape, just not against a checked template. **Concrete, low-cost
+change**: when the Playbook's gated verticals actually get written as real skill files, require
+each `gate` string to parse as an EARS When/While clause (a trigger or precondition, stated as
+a confirmed observation, never a guess) and have `exhaust skill lint` check the string starts
+with one of EARS's own keywords (When/While/Where/If) or an equivalent confirmed-observation
+phrasing. This doesn't change any `gate` text already written — it's a shape exhaust could hold
+new ones to once a real gated vertical skill file gets authored.
+
+What EARS does *not* help with: it's a requirements-statement syntax (what a system shall do),
+not a procedure syntax (the ordered steps an agent takes to find out). It complements RFC
+2119's keyword vocabulary (one states the trigger shape, the other states the instruction
+strength) rather than competing with it — exhaust's `gate` field is the EARS-shaped piece;
+`Procedure`'s numbered steps are the RFC-2119-shaped piece.
+
+## 7. Matt Pocock's `writing-for-agents` skill — context load vs. cognitive load, and a sharper framing of progressive disclosure
+
+Source: `writing-for-agents/SKILL.md` and its companion `SKILL-MECHANICS.md`, from the
+`mattpocock-skills` plugin already installed in this very session (cached at
+`~/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.3.1/skills/productivity/writing-for-agents/`,
+upstream `github.com/mattpocock/skills`). This isn't a standards body or an academic source the
+way the others in this document are — it's a working agent-prompt-engineering practitioner's
+own distilled reference — but it's the single most directly applicable source found in this
+whole pass, because it's written specifically about the exact kind of document exhaust's skill
+files are (documents consumed by an agent to do procedural work), not adapted from a different
+domain the way RFC 2119, Diátaxis, WHO, and SRE all are.
+
+Three findings, each concrete enough to check against `skills/injection/SKILL.md` directly:
+
+1. **Two distinct costs, not one.** The skill names "context load" (the token/attention cost of
+   always-loaded material, like a `description`) and "cognitive load" (the cost on the *human*
+   of remembering a document exists and when to reach for it) as separate budgets that trade
+   against each other. This sharpens something this session's audits only gestured at:
+   `disable-model-invocation` (found in `cursor/plugins`' `pstack` and confirmed as a real
+   Claude Code field) isn't just "a flag for sub-verticals the Harness can dispatch
+   deterministically" — it's a context-load-vs-cognitive-load trade, and the skill states the
+   actual decision rule plainly: "Pick model-invocation only when the agent must reach the
+   skill on its own, or another skill must. If it only ever fires by hand, make it
+   user-invoked and pay no context load." This is a direct, actionable answer to the open
+   question already on this project's own list (`docs/research/2026-10-28-agent-skills-ecosystem-audit.md`'s
+   closing deltas) — worth citing by name when that question actually gets decided.
+2. **Progressive disclosure is framed as hierarchy protection, not a token optimisation** —
+   a sharper claim than ADR 0013's own framing. Quote: "Not primarily a token optimisation: it
+   is how the hierarchy is protected... Branching is the cleanest disclosure test: inline what
+   every branch needs, and push behind a pointer what only some branches reach." Checked
+   against `skills/injection/SKILL.md`'s own §Sub-cases decision (keeping command/SQL/LDAP/SSTI
+   inline rather than splitting into `references/` files yet): that decision already used
+   exactly this branching test in its own stated reasoning ("none of them yet has enough
+   Target-specific nuance to outgrow a few lines... split one out the first time its procedure
+   needs engine-specific detail") — independent convergence, not something this document
+   introduced.
+3. **Negation is a named failure mode, with a mechanism, not just folk wisdom.** Quote: "steering
+   by prohibition drags the forbidden behaviour into context and makes it more available, not
+   less... Prompt the positive: state the target behaviour... so the banned one is never
+   spoken." Checked directly against `skills/injection/SKILL.md`'s own body: its one explicit
+   prohibition ("Never escalate a class that produced no diff in step 4 on the theory that a
+   stronger payload might still work") is paired with the positive instruction immediately
+   before it ("Escalate only a confirmed diff, one payload class at a time"), which already
+   follows this rule — the negative is a restatement of a boundary already set positively, not
+   doing standalone work. No change needed here, but worth naming as a check for any future
+   vertical's procedure: a standalone prohibition with no accompanying positive statement of
+   the target behaviour is now a named thing to watch for, not just a vague "don't phrase
+   things negatively" intuition.
+
+Also directly relevant, though not yet actionable for exhaust specifically: the "Steps and
+completion criteria" section's distinction between a criterion's **clarity** (can the agent
+tell done from not-done) and its **demand** (how much work it actually requires) gives a
+sharper vocabulary than this document's own §3/§4 findings for evaluating an Exit condition's
+quality — `skills/injection/SKILL.md`'s current exit condition ("every enumerated input has a
+recorded baseline and has been probed against every payload class... every diff has either been
+escalated or explicitly dismissed with the reason") is checkable (clear) and exhaustive
+(high-demand) by this vocabulary's own test, which is a second, independent confirmation of the
+same soundness the WHO checklist comparison already found in §3.
+
 ## Summary of concrete deltas against the current spec/injection file
 
 | # | Finding | Confirms or changes? |
@@ -207,6 +318,8 @@ guidance documents.
 | 3 | WHO checklist: short, externally-referenced, non-skippable pause points, partial compliance = design defect | **Confirms** injection's baseline-then-diff and stated exit condition are structurally sound; **suggests** adding an explicit per-step stop condition, not just a whole-vertical exit condition. Read-do/do-confirm terminology **not confirmed** — don't cite it as fact. |
 | 4 | SRE book: hypothesis-driven troubleshooting, expected/actual/repro problem reports, "every page actionable" | Mostly **confirms** existing discipline already present in injection's baseline step; **small change**: extend the gate-description lint check to require the gate be phrasable as a concrete next action. No runbook template found in this edition — flagged, not invented. |
 | 5 | ISO/regulatory SOP structure | **Not confirmed.** Both candidate primary sources failed to extract as text in this environment; stated as an open gap rather than guessed. |
+| 6 | EARS: fixed trigger-clause templates (When/While/Where/If-Then), temporal clause order | **New, additive**: a `gate` string's shape isn't checked today; once real gated verticals get written, hold each `gate` to an EARS When/While/If-Then shape and lint the keyword. Doesn't apply to `Procedure` steps — EARS states requirements, not actions. |
+| 7 | Matt Pocock's `writing-for-agents`: context load vs. cognitive load, disclosure-as-hierarchy-protection, negation as a named failure mode | **Confirms** injection's Sub-cases decision and its one prohibition's positive pairing independently; **directly answers** the still-open `disable-model-invocation`-equivalent question from the Agent Skills audit with a concrete decision rule, worth citing when that question is actually decided. |
 
 ## Sources fetched this session
 
@@ -221,6 +334,9 @@ guidance documents.
 - <https://sre.google/sre-book/monitoring-distributed-systems/>
 - <https://sre.google/sre-book/managing-incidents/>
 - <https://sre.google/sre-book/being-on-call/>
+- <https://alistairmavin.com/ears/>
+- <https://en.wikipedia.org/wiki/Easy_Approach_to_Requirements_Syntax> (cross-reference only, not the primary claim)
+- `writing-for-agents/SKILL.md` and `SKILL-MECHANICS.md`, `mattpocock-skills` plugin v1.3.1, cached locally, upstream `github.com/mattpocock/skills` — not a web fetch, but a real, installed, versioned source read in full
 
 ## Sources attempted and not usable (stated explicitly, not substituted)
 
