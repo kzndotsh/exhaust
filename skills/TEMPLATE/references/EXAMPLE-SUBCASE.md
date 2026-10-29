@@ -35,3 +35,13 @@ file is the delta, not a second copy of the whole vertical.
 State only what's different from the parent vertical's own Exit
 condition checklist. If this sub-case closes exactly the same way the
 parent does, say so in one line and don't restate the checklist.
+
+## References
+
+This is where a product-specific citation belongs once this sub-case
+is confirmed to apply: e.g. a reverse proxy's own published API docs,
+cited only in the sub-case that fires once that specific product is
+confirmed, never in the parent vertical's own `SKILL.md`, which has no
+reason to care which proxy sits in front of the Target.
+
+- REPLACE_ME product name: REPLACE_ME url to its own published docs
