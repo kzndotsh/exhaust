@@ -12,6 +12,17 @@ description: >
   XML, Java-object streams) — that's the `deserialization` vertical;
   this one is for payloads interpreted as code or query syntax, never
   payloads reconstructed as a data structure.
+keywords:
+  - SQLi
+  - command injection
+  - shell injection
+  - OS command injection
+  - SSTI
+  - server-side template injection
+  - LDAP injection
+  - NoSQL injection
+  - CRLF injection
+  - header injection
 ---
 
 ## What this vertical investigates
@@ -133,7 +144,13 @@ don't skip them silently. See ADR 0027 for why.
 
 ## References
 
-- PortSwigger, SQL injection: <https://portswigger.net/web-security/sql-injection>
-- PortSwigger, OS command injection: <https://portswigger.net/web-security/os-command-injection>
-- PortSwigger, Server-side template injection: <https://portswigger.net/web-security/server-side-template-injection>
-- PortSwigger, NoSQL injection: <https://portswigger.net/web-security/nosql-injection>
+- MITRE CWE-89, SQL Injection: <https://cwe.mitre.org/data/definitions/89.html>
+- MITRE CWE-78, OS Command Injection: <https://cwe.mitre.org/data/definitions/78.html>
+- MITRE CWE-90, LDAP Injection: <https://cwe.mitre.org/data/definitions/90.html>
+- MITRE CWE-1336, Server-Side Template Injection: <https://cwe.mitre.org/data/definitions/1336.html>
+- MITRE CWE-943, NoSQL Injection: <https://cwe.mitre.org/data/definitions/943.html>
+- MITRE CWE-93, CRLF Injection: <https://cwe.mitre.org/data/definitions/93.html>
+- PortSwigger, SQL injection (testing technique): <https://portswigger.net/web-security/sql-injection>
+- PortSwigger, OS command injection (testing technique): <https://portswigger.net/web-security/os-command-injection>
+- PortSwigger, Server-side template injection (testing technique): <https://portswigger.net/web-security/server-side-template-injection>
+- PortSwigger, NoSQL injection (testing technique): <https://portswigger.net/web-security/nosql-injection>

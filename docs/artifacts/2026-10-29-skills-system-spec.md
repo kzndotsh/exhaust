@@ -46,14 +46,19 @@ description: >
   of structured payloads (pickle, YAML, XML) — that's the
   `deserialization` vertical; this one is for payloads interpreted as
   code or query syntax, not as data structures.
+keywords:
+  - SQLi
+  - OS command injection
 ---
 ```
 
 `name` and `required` are exactly as `catalog.py` validates them today: `name` a non-empty string, `required` a bool. When `required: false`, `gate` is mandatory and must be a non-empty string naming the recon-confirmed trigger signal (ADR 0011); when `required: true`, `gate` must be absent, and `catalog.py` already raises `MalformedSkillFileError` on either violation.
 
-`description` is new to this proposal and is not yet read by `catalog.py` or enforced as part of the generated catalog's schema — adding it is scoped as an implementation follow-up, not part of this document's own claims about present behavior. It carries ADR 0017's four-part routing contract and nothing else: what the vertical's procedure actually does, naming real techniques; an explicit "use when" trigger; and a "do not use for X, use `<other-vertical>`" clause naming the nearest vertical it could be confused with. This is the one field an agent (or a human skimming the catalog) sees before deciding whether a vertical's full body is worth loading, so it has to do real routing work, not restate the vertical's name in a sentence.
+`description` carries ADR 0017's four-part routing contract and nothing else: what the vertical's procedure actually does, naming real techniques; an explicit "use when" trigger; and a "do not use for X, use `<other-vertical>`" clause naming the nearest vertical it could be confused with. This is the one field an agent (or a human skimming the catalog) sees before deciding whether a vertical's full body is worth loading, so it has to do real routing work, not restate the vertical's name in a sentence. `catalog.py` enforces it as a required, non-empty string.
 
-No other top-level front-matter key is sanctioned by this proposal. A vertical that needs more structured metadata than `name`/`required`/`gate`/`description` is a signal to raise it as a change to this spec, not to quietly add a field one skill file uses and the rest don't — the generator reads every file through the same schema, and an unenforced field only one author adopted is exactly the kind of silent-drift risk ADR 0016 exists to rule out.
+`keywords` is optional and defaults to empty: a flat list of acronyms, industry jargon, and named techniques (`SQLi`, `IDOR`, `shell injection`) a human or agent might search by instead of this vertical's own name — a glossary-style discovery index, never read for routing or dispatch, and never a claim that a term belongs exclusively to one vertical. The same keyword legitimately appearing under two verticals (`privilege escalation` under both `access-control` and `business-logic`, say) is not an error; only a duplicate `name` is. `catalog.py` validates it as a list of non-empty strings when present, nothing more.
+
+No other top-level front-matter key is sanctioned by this proposal. A vertical that needs more structured metadata than `name`/`required`/`gate`/`description`/`keywords` is a signal to raise it as a change to this spec, not to quietly add a field one skill file uses and the rest don't — the generator reads every file through the same schema, and an unenforced field only one author adopted is exactly the kind of silent-drift risk ADR 0016 exists to rule out.
 
 ## 3. The body: a vertical's procedure
 

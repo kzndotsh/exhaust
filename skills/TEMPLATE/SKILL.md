@@ -11,6 +11,12 @@ description: >
   techniques, not a restatement of its name. State the trigger: "Use
   when...". State the boundary: "Do not use for X, use the `<vertical>`
   vertical."
+# keywords: [REPLACE_ME acronym, REPLACE_ME jargon, REPLACE_ME technique]
+# ^ optional. Search terms a human or agent might use instead of this vertical's
+#   own name (e.g. "SQLi", "IDOR", "shell injection") — a glossary-style index
+#   for discovery, not a routing signal and not a claim of exclusive ownership:
+#   the same term can legitimately appear under more than one vertical.
+#   Delete this line if nothing earns a keyword yet.
 ---
 
 <!--
@@ -129,6 +135,10 @@ rather than in some central list. Put it here if every sub-case needs
 it; put it in the relevant `references/<name>.md` instead if only one
 sub-case does. A named standard with no URL payoff (an RFC number, a
 CWE ID) doesn't need an entry — type it directly into Procedure prose.
-Delete this section if nothing here earns a citation.
+Prefer a neutral standards body (MITRE's CWE, an RFC, OWASP) over a
+single commercial vendor's own doc site when both cover the same
+ground; reaching for one vendor's pages for every citation in a
+vertical is a source-diversity gap, not a shortcut. Delete this
+section if nothing here earns a citation.
 
 - REPLACE_ME name: REPLACE_ME url

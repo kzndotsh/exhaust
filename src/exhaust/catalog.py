@@ -45,12 +45,22 @@ class VerticalEntry:
         ADR 0017's routing contract: what the vertical's procedure does,
         when to use it, and the nearest vertical it could be confused
         with. The only text read before a vertical's full body loads.
+    keywords : tuple[str, ...]
+        Acronyms, industry jargon, and specific techniques a human or
+        agent might search by instead of this vertical's own name
+        (e.g. "SQLi", "SSTI", "shell injection" for `injection`) — a
+        glossary-style index, not a claim that each term is this
+        vertical's own name or that this vertical is the only one that
+        term could ever relate to. Never read for routing or dispatch;
+        `description`'s own use-when/do-not-use-for clauses still own
+        that. Empty by default.
     """
 
     name: str
     required: bool
     gate: str | None
     description: str
+    keywords: tuple[str, ...] = ()
 
 
 def _split_front_matter(text: str, source: Path) -> tuple[str, str]:
@@ -135,7 +145,8 @@ def _entry_from_front_matter(data: dict[str, Any], source: Path) -> VerticalEntr
     MalformedSkillFileError
         If `name` is missing or empty, `required` is not a bool, a
         required vertical carries a `gate`, a gated vertical is missing
-        one, or `description` is missing or empty.
+        one, `description` is missing or empty, or `keywords` is present
+        but isn't a list of non-empty strings.
     """
     name = data.get("name")
     if not isinstance(name, str) or not name:
@@ -159,7 +170,28 @@ def _entry_from_front_matter(data: dict[str, Any], source: Path) -> VerticalEntr
     if not isinstance(description, str) or not description.strip():
         raise MalformedSkillFileError(f"{source}: missing or empty 'description'")
 
-    return VerticalEntry(name=name, required=required, gate=gate, description=description)
+    keywords = _parse_keywords(data.get("keywords"), source)
+
+    return VerticalEntry(
+        name=name, required=required, gate=gate, description=description, keywords=keywords
+    )
+
+
+def _parse_keywords(raw_keywords: Any, source: Path) -> tuple[str, ...]:
+    """Validate the optional `keywords` field, defaulting to empty.
+
+    Raises
+    ------
+    MalformedSkillFileError
+        If `keywords` is present but isn't a list of non-empty strings.
+    """
+    if raw_keywords is None:
+        return ()
+    if not isinstance(raw_keywords, list) or not all(
+        isinstance(keyword, str) and keyword for keyword in cast("list[Any]", raw_keywords)
+    ):
+        raise MalformedSkillFileError(f"{source}: 'keywords' must be a list of non-empty strings")
+    return tuple(cast("list[str]", raw_keywords))
 
 
 def discover_verticals(skills_dir: Path) -> list[VerticalEntry]:
@@ -180,7 +212,9 @@ def discover_verticals(skills_dir: Path) -> list[VerticalEntry]:
     ------
     MalformedSkillFileError
         If any skill file fails validation, or two verticals share a
-        name.
+        name. `keywords` are a search-term index, not an identity
+        claim, so the same keyword legitimately appearing under more
+        than one vertical is not an error.
     """
     if not skills_dir.is_dir():
         return []

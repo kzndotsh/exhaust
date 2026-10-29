@@ -1,8 +1,10 @@
 This directory holds the Playbook's vertical skill files, one subdirectory
 per vertical, each with a `SKILL.md` carrying the front matter `exhaust
 catalog generate` reads (ADR 0016): `name`, `required`, `gate` (only when
-`required: false`), and `description`. The full shape, the authoring
-rules, and the linting plan are specced in
+`required: false`), `description`, and an optional `keywords` list (acronyms
+and jargon a search might use instead of this vertical's own name — a
+glossary-style discovery index, never a routing signal). The full shape, the
+authoring rules, and the linting plan are specced in
 `docs/artifacts/2026-10-29-skills-system-spec.md`; this file is just the
 short version for whoever's about to write one.
 

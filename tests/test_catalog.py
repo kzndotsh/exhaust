@@ -23,8 +23,12 @@ def _write_skill(skills_dir: Path, slug: str, front_matter: str) -> None:
     (skill_dir / "SKILL.md").write_text(f"---\n{front_matter}---\nBody.\n")
 
 
-def _entry(name: str, *, required: bool, gate: str | None = None) -> VerticalEntry:
-    return VerticalEntry(name=name, required=required, gate=gate, description=_DEFAULT_DESCRIPTION)
+def _entry(
+    name: str, *, required: bool, gate: str | None = None, keywords: tuple[str, ...] = ()
+) -> VerticalEntry:
+    return VerticalEntry(
+        name=name, required=required, gate=gate, description=_DEFAULT_DESCRIPTION, keywords=keywords
+    )
 
 
 def test_empty_skills_dir_yields_empty_catalog(tmp_path: Path) -> None:
@@ -97,6 +101,63 @@ def test_blank_description_is_rejected(tmp_path: Path) -> None:
     skill_dir.mkdir(parents=True)
     (skill_dir / "SKILL.md").write_text(
         "---\nname: injection\nrequired: true\ndescription: '   '\n---\nBody.\n"
+    )
+
+    with pytest.raises(MalformedSkillFileError):
+        discover_verticals(skills_dir)
+
+
+def test_keywords_default_to_empty(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+
+    entries = discover_verticals(skills_dir)
+    assert entries == [_entry("injection", required=True)]
+
+
+def test_keywords_are_read_from_front_matter(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(
+        skills_dir,
+        "injection",
+        "name: injection\nrequired: true\nkeywords: [SQLi, SSTI, shell injection]\n",
+    )
+
+    entries = discover_verticals(skills_dir)
+    assert entries == [
+        _entry("injection", required=True, keywords=("SQLi", "SSTI", "shell injection"))
+    ]
+
+
+def test_the_same_keyword_under_two_verticals_is_not_a_duplicate_error(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(
+        skills_dir,
+        "access-control",
+        "name: access_control\nrequired: true\nkeywords: [privilege escalation]\n",
+    )
+    _write_skill(
+        skills_dir,
+        "business-logic",
+        "name: business_logic\nrequired: true\nkeywords: [privilege escalation]\n",
+    )
+
+    entries = discover_verticals(skills_dir)
+    assert {entry.name for entry in entries} == {"access_control", "business_logic"}
+
+
+def test_a_non_list_keywords_is_rejected(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\nkeywords: SQLi\n")
+
+    with pytest.raises(MalformedSkillFileError):
+        discover_verticals(skills_dir)
+
+
+def test_a_blank_keyword_in_the_list_is_rejected(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(
+        skills_dir, "injection", "name: injection\nrequired: true\nkeywords: ['SQLi', '']\n"
     )
 
     with pytest.raises(MalformedSkillFileError):
