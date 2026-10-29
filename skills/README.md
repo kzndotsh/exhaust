@@ -33,15 +33,15 @@ locked.
    reject` section for security verticals, its sub-cases (inline until
    one needs detail no other sub-case does, then split into
    `references/<name>.md` — see `skills/TEMPLATE/references/EXAMPLE-SUBCASE.md`
-   for the shape), an optional `References` section pointing at any
-   stable third-party doc the procedure actually relies on (mirrors
-   `ToolInfo.doc`, placed with the sub-case that needs it rather than
-   centrally), and a `Known gaps` section naming any step that needs a
-   Rig tool or method that isn't pinned yet. Never invent a tool call
-   the Rig doesn't register. Use capitalized MUST/MUST NOT/SHOULD/MAY
-   (RFC 2119) inside Procedure and Exit condition only, and render Exit
-   condition as a checklist once more than one independent condition
-   closes it. See
+   for the shape), a `Known gaps` section naming any step that needs a
+   Rig tool or method that isn't pinned yet, and, last, an optional
+   `References` section pointing at any stable third-party doc the
+   procedure actually relies on (mirrors `ToolInfo.doc`, placed with
+   the sub-case that needs it rather than centrally). Never invent a
+   tool call the Rig doesn't register. Use capitalized MUST/MUST
+   NOT/SHOULD/MAY (RFC 2119) inside Procedure and Exit condition only,
+   and render Exit condition as a checklist once more than one
+   independent condition closes it. See
    `docs/research/2026-10-29-procedural-writing-standards.md` for why
    each of these conventions earned a place in the template.
 5. Run `uv run exhaust catalog generate && uv run exhaust catalog check

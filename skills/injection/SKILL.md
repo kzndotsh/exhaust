@@ -123,13 +123,6 @@ time its procedure needs engine-specific detail (e.g. a payload table
 keyed on which SQL dialect or templating engine recon identified) long
 enough to be worth deferring from every other turn's context.
 
-## References
-
-- PortSwigger, SQL injection: <https://portswigger.net/web-security/sql-injection>
-- PortSwigger, OS command injection: <https://portswigger.net/web-security/os-command-injection>
-- PortSwigger, LDAP injection: <https://portswigger.net/web-security/ldap-injection>
-- PortSwigger, Server-side template injection: <https://portswigger.net/web-security/server-side-template-injection>
-
 ## Known gaps
 
 `curl.get`/`curl.post_form` (ADR 0027) dispatch steps 2 through 5 for
@@ -137,3 +130,10 @@ query-parameter and form-field inputs. Header/cookie inputs,
 uploaded-filename inputs, and path-segment inputs have no Rig method
 yet: treat those as blocked, name them in the run's own notes, and
 don't skip them silently. See ADR 0027 for why.
+
+## References
+
+- PortSwigger, SQL injection: <https://portswigger.net/web-security/sql-injection>
+- PortSwigger, OS command injection: <https://portswigger.net/web-security/os-command-injection>
+- PortSwigger, LDAP injection: <https://portswigger.net/web-security/ldap-injection>
+- PortSwigger, Server-side template injection: <https://portswigger.net/web-security/server-side-template-injection>

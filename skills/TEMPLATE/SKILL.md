@@ -110,12 +110,20 @@ skill: progressive disclosure is hierarchy protection, not a token
 optimization — split when a sub-case needs detail no other branch
 does, not pre-emptively). Delete this section if there are none yet.
 
+## Known gaps
+
+State fact and required action only: what's blocked, what to do about
+it (name it in the run's own notes, never skip silently), and which
+ADR explains why. No alternatives considered, no backstory — that's
+explanation, and explanation belongs in the ADR, not in a file this
+vertical's own turn re-reads every time it runs.
+
 ## References
 
-Optional. A pointer only, never inlined explanation, to a stable,
-canonical third-party doc the procedure above actually relies on (an
-RFC, a CWE page, a specific product's own published API or behavior
-docs) — the same job `ToolInfo.doc` does for a Rig bridge
+Optional, last section. A pointer only, never inlined explanation, to
+a stable, canonical third-party doc the procedure above actually
+relies on (an RFC, a CWE page, a specific product's own published API
+or behavior docs) — the same job `ToolInfo.doc` does for a Rig bridge
 (`src/exhaust/rig/bridges.py`), placed next to the thing that needs it
 rather than in some central list. Put it here if every sub-case needs
 it; put it in the relevant `references/<name>.md` instead if only one
@@ -124,11 +132,3 @@ CWE ID) doesn't need an entry — type it directly into Procedure prose.
 Delete this section if nothing here earns a citation.
 
 - REPLACE_ME name: REPLACE_ME url
-
-## Known gaps
-
-State fact and required action only: what's blocked, what to do about
-it (name it in the run's own notes, never skip silently), and which
-ADR explains why. No alternatives considered, no backstory — that's
-explanation, and explanation belongs in the ADR, not in a file this
-vertical's own turn re-reads every time it runs.
