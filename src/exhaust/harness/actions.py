@@ -18,6 +18,7 @@ from typing import Any, Literal
 from exhaust.findings import FindingScope, Verdict
 from exhaust.ledger import VerticalState
 from exhaust.rig import ToolResult
+from exhaust.surface import GateStatus, InputKind
 
 
 @dataclass(frozen=True)
@@ -189,8 +190,74 @@ class SetVerticalState:
     reason: str
 
 
+@dataclass(frozen=True)
+class RecordSurfaceInput:
+    """Record one input the Target exposes (ADR 0011, ADR 0024).
+
+    Attributes
+    ----------
+    vertical : str
+        The vertical recording this — recon's own first pass, or
+        whichever vertical surfaced it mid-run. Becomes the recorded
+        input's `source`.
+    kind : InputKind
+        What kind of input this is.
+    location : str
+        The URL or endpoint this input was observed on.
+    name : str
+        The parameter, header, field, or cookie name (empty for a bare
+        path segment).
+    reach_method : str
+        The Rig method name a consuming vertical calls to place a value
+        at this input.
+    reach_param : str
+        The `reach_method` keyword argument a payload goes into.
+    normal_value : str
+        A well-formed value, so a consuming vertical can baseline before
+        probing.
+    """
+
+    vertical: str
+    kind: InputKind
+    location: str
+    name: str
+    reach_method: str
+    reach_param: str
+    normal_value: str
+
+
+@dataclass(frozen=True)
+class RecordGateSignal:
+    """Record one observation about a gated vertical's declared trust boundary.
+
+    Attributes
+    ----------
+    vertical : str
+        The vertical recording this.
+    signal : str
+        The gate string this observation is about, matching some gated
+        vertical's own `gate` front-matter value verbatim.
+    status : GateStatus
+        Whether this observation confirms or refutes the signal.
+    evidence : str
+        What was actually observed, for the audit trail.
+    """
+
+    vertical: str
+    signal: str
+    status: GateStatus
+    evidence: str
+
+
 AgentAction = (
-    SandboxCall | RealTargetCall | RecordFinding | ProposeVerdict | SelfReport | SetVerticalState
+    SandboxCall
+    | RealTargetCall
+    | RecordFinding
+    | RecordSurfaceInput
+    | RecordGateSignal
+    | ProposeVerdict
+    | SelfReport
+    | SetVerticalState
 )
 
 

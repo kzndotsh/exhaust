@@ -39,17 +39,19 @@ explains.
 
 ## Procedure
 
-1. MUST enumerate every input before touching any of them. Every form
-   field, query parameter, header, cookie, path segment, and upload
-   filename the Target exposes is a candidate. An input not on this
-   list before step 2 starts MUST NOT be probed — do not discover and
-   test in the same pass, since an untracked input makes the Exit
-   condition below unverifiable. Dispatch per input shape:
-   `curl.get` for query parameters and, via its `path_segment`
-   parameter, path segments; `curl.post_form` for form fields; either
-   method's `headers` parameter for header and cookie inputs;
-   `curl.post_multipart` for uploaded-filename inputs, where `filename`
-   is the injection point and `content` is harmless test data.
+1. MUST read the Workspace's enumerated surface before touching any
+   input — this vertical does not enumerate the Target itself; recon
+   has already done that. Every input in the surface is a candidate; one
+   not there MUST NOT be probed. Each input already carries which Rig
+   method and parameter reaches it, so dispatch through that rather than
+   re-deriving a shape-to-method mapping: `curl.get` for query
+   parameters and, via its `path_segment` parameter, path segments;
+   `curl.post_form` for form fields; either method's `headers` parameter
+   for header and cookie inputs; `curl.post_multipart` for
+   uploaded-filename inputs, where `filename` is the injection point and
+   `content` is harmless test data. An input this vertical's own probing
+   surfaces that isn't already in the surface MUST be recorded there
+   before it is probed, so later verticals and later runs see it too.
 2. MUST record a baseline for every input first: submit each input's
    own normal, well-formed value and record the response (status code,
    timing, body length, and any error text verbatim). Every later diff

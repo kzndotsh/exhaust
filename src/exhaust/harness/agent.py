@@ -31,11 +31,18 @@ class AgentTurnRequest:
         That vertical's full procedure doc.
     available_tools : tuple[ToolInfo, ...]
         What the Rig currently has registered.
+    gate_signals_to_confirm : frozenset[str]
+        Every distinct `gate` some gated vertical in the catalog declares
+        (`catalog.required_gate_signals`), recomputed fresh every turn.
+        Only recon's own procedure acts on this; it exists on every
+        turn's request rather than only recon's so the Harness never has
+        to special-case which vertical is "the recon one."
     """
 
     vertical: VerticalEntry
     procedure: str
     available_tools: tuple[ToolInfo, ...]
+    gate_signals_to_confirm: frozenset[str]
 
 
 class AgentSession(Protocol):

@@ -13,9 +13,9 @@ The Playbook's actual vertical catalog is still not locked (see
 0016 forbids a second, hand-maintained list of verticals anywhere,
 including here: the only source of truth is the skill files themselves,
 read by the generator, never a list written in this README. `injection`
-is the first real one, written against the required set the proposal
-currently describes; it is not a declaration that the catalog has
-locked.
+and `recon` are the first two real ones, written against the required
+set the proposal currently describes; this is not a declaration that the
+catalog has locked.
 
 ## Writing a new vertical
 

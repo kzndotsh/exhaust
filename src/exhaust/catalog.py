@@ -234,6 +234,29 @@ def discover_verticals(skills_dir: Path) -> list[VerticalEntry]:
     return sorted(entries, key=lambda entry: entry.name)
 
 
+def required_gate_signals(entries: list[VerticalEntry]) -> frozenset[str]:
+    """Every distinct `gate` some gated vertical in `entries` declares.
+
+    Recon's own worklist, derived from the catalog rather than kept as a
+    second, hand-maintained list (ADR 0016): a new gated vertical's `gate`
+    is picked up here automatically the moment its skill file is
+    discovered, with nothing for a human to keep in sync.
+
+    Parameters
+    ----------
+    entries : list[VerticalEntry]
+        A catalog, as returned by `discover_verticals`.
+
+    Returns
+    -------
+    frozenset[str]
+        Every distinct gate a non-required vertical in `entries` declares.
+    """
+    return frozenset(
+        entry.gate for entry in entries if not entry.required and entry.gate is not None
+    )
+
+
 def _find_skill_file(skills_dir: Path, name: str) -> Path:
     """Locate the skill file that declares vertical `name` under `skills_dir`.
 

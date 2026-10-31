@@ -18,6 +18,18 @@
       ],
       "name": "injection",
       "required": true
+    },
+    {
+      "description": "Enumerates every request-shaped input the Target exposes (form fields, query parameters, headers, cookies, path segments, upload filenames) and attempts to confirm or refute every gate signal a gated vertical declares, recording both to the Workspace's shared surface. Use when a Workspace's Playbook starts, before any other vertical's own investigation begins. Do not use for judging what a discovered input means for a specific weakness class, or for probing it \u2014 that's every offensive vertical's own job; this one only maps what the Target exposes and never claims a weakness of its own.\n",
+      "gate": null,
+      "keywords": [
+        "enumeration",
+        "surface mapping",
+        "fingerprinting",
+        "attack surface discovery"
+      ],
+      "name": "recon",
+      "required": true
     }
   ]
 }

@@ -74,6 +74,7 @@ def _request(vertical: str = "injection") -> AgentTurnRequest:
         ),
         procedure="Try these payloads.",
         available_tools=(ToolInfo(name="fake-scanner", usage="scans", doc="see docs"),),
+        gate_signals_to_confirm=frozenset(),
     )
 
 

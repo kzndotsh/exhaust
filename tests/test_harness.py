@@ -21,6 +21,8 @@ from exhaust.harness import (
     ProposeVerdict,
     RealTargetCall,
     RecordFinding,
+    RecordGateSignal,
+    RecordSurfaceInput,
     RunBudget,
     RunOutcome,
     SandboxCall,
@@ -32,6 +34,14 @@ from exhaust.harness import (
 from exhaust.harness.agent import AgentTurnRequest
 from exhaust.ledger import VerticalState, current_state, transition
 from exhaust.rig import MethodInfo, ToolInfo, ToolResult
+from exhaust.surface import (
+    GateSignal,
+    GateStatus,
+    InputKind,
+    enumerated_inputs,
+    is_gate_satisfied,
+    record_gate_signal,
+)
 
 
 class FakeScanner:
@@ -603,6 +613,11 @@ def test_self_report_reaches_exhausted_once_every_claim_checks_out(tmp_path: Pat
 def test_run_one_turn_gives_the_agent_the_real_procedure_and_tools(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
     _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    _write_skill(
+        skills_dir,
+        "reverse-proxy-smuggling",
+        "name: reverse-proxy-smuggling\nrequired: false\ngate: reverse-proxy-confirmed\n",
+    )
     scanner = FakeScanner()
 
     class CapturingAgent:
@@ -628,6 +643,7 @@ def test_run_one_turn_gives_the_agent_the_real_procedure_and_tools(tmp_path: Pat
     request = agent.requests[0]
     assert request.procedure == "Body."
     assert request.available_tools == (FakeScanner.info,)
+    assert request.gate_signals_to_confirm == frozenset({"reverse-proxy-confirmed"})
 
 
 def test_run_outcome_summary_lists_each_vertical() -> None:
@@ -642,6 +658,153 @@ def test_run_outcome_summary_lists_each_vertical() -> None:
         turns_spent=3,
     )
     assert outcome.summary() == "access_control: exhausted\ninjection: skipped"
+
+
+def test_a_gated_vertical_is_never_picked_while_its_gate_is_unconfirmed(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    _write_skill(
+        skills_dir,
+        "reverse-proxy-smuggling",
+        "name: reverse-proxy-smuggling\nrequired: false\ngate: reverse-proxy-confirmed\n",
+    )
+    agent = ScriptedAgent(
+        [SetVerticalState(vertical="injection", to=VerticalState.SKIPPED, reason="not applicable")]
+    )
+
+    harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=agent)
+    outcome = harness.run(budget=RunBudget(max_turns=10))
+
+    # The required vertical gets its one scripted turn; the gated vertical, its gate
+    # never confirmed, is skipped by the terminal sweep without ever taking a turn.
+    assert outcome.turns_spent == 1
+    assert outcome.done is True
+    assert outcome.final_states == {
+        "injection": VerticalState.SKIPPED,
+        "reverse-proxy-smuggling": VerticalState.SKIPPED,
+    }
+
+
+def test_a_confirmed_gate_signal_makes_its_gated_vertical_eligible(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    _write_skill(
+        skills_dir,
+        "reverse-proxy-smuggling",
+        "name: reverse-proxy-smuggling\nrequired: false\ngate: reverse-proxy-confirmed\n",
+    )
+    record_gate_signal(
+        tmp_path,
+        GateSignal(
+            signal="reverse-proxy-confirmed",
+            status=GateStatus.CONFIRMED,
+            evidence="Via header present on every response",
+            source="recon",
+        ),
+    )
+    agent = ScriptedAgent(
+        [
+            SetVerticalState(vertical="injection", to=VerticalState.SKIPPED, reason="n/a"),
+            SetVerticalState(
+                vertical="reverse-proxy-smuggling", to=VerticalState.SKIPPED, reason="n/a"
+            ),
+        ]
+    )
+
+    harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=agent)
+    outcome = harness.run(budget=RunBudget(max_turns=10))
+
+    assert outcome.turns_spent == 2
+    assert outcome.done is True
+    assert outcome.final_states == {
+        "injection": VerticalState.SKIPPED,
+        "reverse-proxy-smuggling": VerticalState.SKIPPED,
+    }
+
+
+def test_a_blocked_vertical_holds_off_the_terminal_sweep(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "injection", "name: injection\nrequired: true\n")
+    _write_skill(
+        skills_dir,
+        "reverse-proxy-smuggling",
+        "name: reverse-proxy-smuggling\nrequired: false\ngate: reverse-proxy-confirmed\n",
+    )
+    transition(tmp_path, "injection", VerticalState.IN_PROGRESS)
+    transition(tmp_path, "injection", VerticalState.BLOCKED, reason="ambiguous outcome")
+
+    harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=ScriptedAgent([]))
+    outcome = harness.run(budget=RunBudget(max_turns=10))
+
+    # injection's own block could still be resolved into a run that confirms the
+    # gate, so the gated vertical isn't swept away just because it's the only
+    # other thing left; the run halts for the human instead.
+    assert outcome.done is False
+    assert outcome.halted_reason is HaltReason.HUMAN_REQUIRED
+    assert outcome.needs_human == ("injection",)
+    assert outcome.final_states["reverse-proxy-smuggling"] == VerticalState.PENDING
+
+
+def test_record_surface_input_is_readable_from_the_surface(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "recon", "name: recon\nrequired: true\n")
+
+    agent = ScriptedAgent(
+        [
+            RecordSurfaceInput(
+                vertical="recon",
+                kind=InputKind.QUERY_PARAM,
+                location="https://target/search",
+                name="q",
+                reach_method="get",
+                reach_param="query",
+                normal_value="test",
+            )
+        ]
+    )
+    harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=agent)
+    harness.run(budget=RunBudget(max_turns=1))
+
+    inputs = enumerated_inputs(tmp_path)
+    assert len(inputs) == 1
+    assert inputs[0].name == "q"
+    assert inputs[0].source == "recon"
+    assert agent.observed == [ToolResult(ok=True, output="recorded input 'q' (query_param)")]
+
+
+def test_record_gate_signal_unlocks_a_gated_vertical_in_the_same_run(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    _write_skill(skills_dir, "recon", "name: recon\nrequired: true\n")
+    _write_skill(
+        skills_dir,
+        "reverse-proxy-smuggling",
+        "name: reverse-proxy-smuggling\nrequired: false\ngate: reverse-proxy-confirmed\n",
+    )
+
+    # Turn 1 goes to recon, the only eligible PENDING vertical before any gate is
+    # confirmed; turn 2 still nominally goes to recon (now in_progress, preferred
+    # over a pending vertical), but the action's own `vertical` field, not the
+    # turn's entry, decides what it affects — this is what lets a gate confirmed
+    # mid-turn 1 unlock reverse-proxy-smuggling in time for turn 2's action.
+    agent = ScriptedAgent(
+        [
+            RecordGateSignal(
+                vertical="recon",
+                signal="reverse-proxy-confirmed",
+                status=GateStatus.CONFIRMED,
+                evidence="Via header present on every response",
+            ),
+            SetVerticalState(
+                vertical="reverse-proxy-smuggling", to=VerticalState.SKIPPED, reason="n/a"
+            ),
+        ]
+    )
+    harness = Harness.open(tmp_path, skills_dir, "roundcube", agent=agent)
+    outcome = harness.run(budget=RunBudget(max_turns=2))
+
+    assert is_gate_satisfied(tmp_path, "reverse-proxy-confirmed") is True
+    assert current_state(tmp_path, "reverse-proxy-smuggling") == VerticalState.SKIPPED
+    assert outcome.turns_spent == 2
 
 
 def test_run_outcome_summary_on_no_verticals() -> None:

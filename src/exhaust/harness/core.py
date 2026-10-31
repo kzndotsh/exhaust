@@ -26,7 +26,7 @@ from exhaust.approvals import is_approved as approval_is_approved
 from exhaust.approvals import request_approval as approval_request
 from exhaust.approvals import resolve as approval_resolve
 from exhaust.attempts import record_attempt, tools_exercised
-from exhaust.catalog import VerticalEntry, discover_verticals, read_procedure
+from exhaust.catalog import VerticalEntry, discover_verticals, read_procedure, required_gate_signals
 from exhaust.evidence import (
     EvidenceAlreadyExistsError,
     EvidenceCopyVerificationError,
@@ -63,6 +63,8 @@ from exhaust.harness.actions import (
     ProposeVerdict,
     RealTargetCall,
     RecordFinding,
+    RecordGateSignal,
+    RecordSurfaceInput,
     SandboxCall,
     SelfReport,
     SetVerticalState,
@@ -84,6 +86,9 @@ from exhaust.rig import call as rig_call
 from exhaust.rig import method_info as rig_method_info
 from exhaust.rig import tools as rig_tools
 from exhaust.scope_contract import is_in_scope
+from exhaust.surface import GateSignal, SurfaceInput, is_gate_satisfied
+from exhaust.surface import record_gate_signal as surface_record_gate_signal
+from exhaust.surface import record_input as surface_record_input
 
 
 class HaltReason(StrEnum):
@@ -305,6 +310,8 @@ class Harness:
 
             entry = self._pick_active_vertical(names)
             if entry is None:
+                if self._skip_ungated_verticals(names):
+                    continue
                 return RunOutcome(
                     done=False,
                     halted_reason=HaltReason.HUMAN_REQUIRED,
@@ -331,10 +338,10 @@ class Harness:
 
         Fixed strategy for v1, not pluggable: prefer a vertical already
         `in_progress` or `retryable` (resume it) over starting a new
-        `pending` one. Gate-based ordering (`VerticalEntry.gate`) is
-        deferred; this sketch's own open questions haven't settled what
-        a gate names. `blocked` and terminal verticals are never
-        returned.
+        `pending` one. A `pending` gated vertical is only picked once its
+        `gate` is satisfied (`_eligible`); a `required` vertical, recon
+        included, is always eligible. `blocked` and terminal verticals are
+        never returned.
         """
         entries = {entry.name: entry for entry in discover_verticals(self._skills_dir)}
 
@@ -344,16 +351,81 @@ class Harness:
                 return entries[name]
 
         for name in names:
-            if current_state(self._workspace_dir, name) == VerticalState.PENDING:
-                return entries[name]
+            entry = entries[name]
+            if current_state(self._workspace_dir, name) == VerticalState.PENDING and self._eligible(
+                entry
+            ):
+                return entry
 
         return None
 
+    def _eligible(self, entry: VerticalEntry) -> bool:
+        """Whether `entry` is allowed to start: always for `required`, else gate-checked.
+
+        The composed, never-persisted scheduling predicate ADR 0011's
+        gate exists for: a `required` vertical runs on every Workspace
+        regardless of Target, and a gated vertical is eligible exactly
+        when `surface.is_gate_satisfied` finds a confirmed signal matching
+        its declared `gate`.
+        """
+        if entry.required:
+            return True
+        assert entry.gate is not None  # enforced by catalog.py's own front-matter validation
+        return is_gate_satisfied(self._workspace_dir, entry.gate)
+
+    def _skip_ungated_verticals(self, names: list[str]) -> bool:
+        """Close out any gated vertical whose gate will never be confirmed now.
+
+        Only once nothing else could still confirm a gate — no vertical is
+        `pending`-and-eligible, `in_progress`, `retryable`, or `blocked` —
+        does an unconfirmed gated vertical's `pending` stop being "not
+        started yet" and become "this Target never showed that trust
+        boundary." Deferring the skip to this last-call moment, rather
+        than deciding it once up front, is what lets a late-discovered
+        signal (surfaced by any vertical's own probing, not only recon's
+        first pass) still unlock a gated vertical right up until the
+        Workspace would otherwise be done.
+
+        Returns
+        -------
+        bool
+            Whether anything was actually skipped, so the caller knows
+            whether to re-check `is_workspace_done` rather than halting.
+        """
+        entries = {entry.name: entry for entry in discover_verticals(self._skills_dir)}
+        pending_ineligible = [
+            name
+            for name in names
+            if current_state(self._workspace_dir, name) == VerticalState.PENDING
+            and not self._eligible(entries[name])
+        ]
+        if not pending_ineligible:
+            return False
+
+        still_open = (VerticalState.IN_PROGRESS, VerticalState.RETRYABLE, VerticalState.BLOCKED)
+        if any(
+            current_state(self._workspace_dir, name) in still_open
+            for name in names
+            if name not in pending_ineligible
+        ):
+            return False
+
+        for name in pending_ineligible:
+            transition(
+                self._workspace_dir,
+                name,
+                VerticalState.SKIPPED,
+                reason=f"gate {entries[name].gate!r} was never confirmed",
+            )
+        return True
+
     def _run_one_turn(self, entry: VerticalEntry) -> None:
+        catalog = discover_verticals(self._skills_dir)
         request = AgentTurnRequest(
             vertical=entry,
             procedure=read_procedure(self._skills_dir, entry.name),
             available_tools=tuple(rig_tools(self._bridges)),
+            gate_signals_to_confirm=required_gate_signals(catalog),
         )
         action = self._agent.step(request)
 
@@ -382,6 +454,10 @@ class Harness:
                 return self._real_target_call(a)
             case RecordFinding() as a:
                 return self._record_finding(a)
+            case RecordSurfaceInput() as a:
+                return self._record_surface_input(a)
+            case RecordGateSignal() as a:
+                return self._record_gate_signal(a)
             case ProposeVerdict() as a:
                 return self._propose_verdict(a)
             case SelfReport() as a:
@@ -475,6 +551,28 @@ class Harness:
             return ActionRejected(str(exc))
 
         return ToolResult(ok=True, output=f"recorded finding {finding.id}")
+
+    def _record_surface_input(self, a: RecordSurfaceInput) -> ActionOutcome:
+        surface_record_input(
+            self._workspace_dir,
+            SurfaceInput(
+                kind=a.kind,
+                location=a.location,
+                name=a.name,
+                reach_method=a.reach_method,
+                reach_param=a.reach_param,
+                normal_value=a.normal_value,
+                source=a.vertical,
+            ),
+        )
+        return ToolResult(ok=True, output=f"recorded input {a.name!r} ({a.kind.value})")
+
+    def _record_gate_signal(self, a: RecordGateSignal) -> ActionOutcome:
+        surface_record_gate_signal(
+            self._workspace_dir,
+            GateSignal(signal=a.signal, status=a.status, evidence=a.evidence, source=a.vertical),
+        )
+        return ToolResult(ok=True, output=f"recorded gate signal {a.signal!r}: {a.status.value}")
 
     def _propose_verdict(self, a: ProposeVerdict) -> ActionOutcome:
         oracle_result = self._obtain_oracle_result(a.finding_id, a.verdict)

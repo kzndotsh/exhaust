@@ -14,6 +14,7 @@ def test_scaffold_creates_expected_layout(tmp_path: Path) -> None:
     assert (workspace / "sandbox" / "docker-compose.yml").is_file()
     assert (workspace / "poc").is_dir()
     assert (workspace / "findings").is_dir()
+    assert (workspace / "surface").is_dir()
     assert "roundcube" in (workspace / "BRIEF.md").read_text()
 
 

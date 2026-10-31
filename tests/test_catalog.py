@@ -9,6 +9,7 @@ from exhaust.catalog import (
     generate_catalog,
     is_catalog_up_to_date,
     read_procedure,
+    required_gate_signals,
     write_catalog,
 )
 
@@ -245,3 +246,27 @@ def test_read_procedure_rejects_an_unknown_vertical(tmp_path: Path) -> None:
 
     with pytest.raises(MalformedSkillFileError):
         read_procedure(skills_dir, "nonexistent")
+
+
+def test_required_gate_signals_is_empty_with_no_gated_verticals() -> None:
+    entries = [_entry("injection", required=True)]
+    assert required_gate_signals(entries) == frozenset()
+
+
+def test_required_gate_signals_collects_every_gated_verticals_gate() -> None:
+    entries = [
+        _entry("injection", required=True),
+        _entry("reverse-proxy-smuggling", required=False, gate="reverse-proxy-confirmed"),
+        _entry("graphql", required=False, gate="graphql-confirmed"),
+    ]
+    assert required_gate_signals(entries) == frozenset(
+        {"reverse-proxy-confirmed", "graphql-confirmed"}
+    )
+
+
+def test_required_gate_signals_deduplicates_a_shared_gate() -> None:
+    entries = [
+        _entry("request-smuggling", required=False, gate="reverse-proxy-confirmed"),
+        _entry("cache-poisoning", required=False, gate="reverse-proxy-confirmed"),
+    ]
+    assert required_gate_signals(entries) == frozenset({"reverse-proxy-confirmed"})

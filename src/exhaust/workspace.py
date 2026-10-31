@@ -64,3 +64,4 @@ def scaffold_workspace(path: Path, target: str) -> None:
 
     (path / "poc").mkdir()
     (path / "findings").mkdir()
+    (path / "surface").mkdir()
