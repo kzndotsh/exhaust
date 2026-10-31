@@ -29,9 +29,11 @@ answer instead of each re-discovering it alone.
 
 1. MUST enumerate every form field, query parameter, header, cookie, path
    segment, and upload filename the Target exposes, using whatever Rig
-   tools are available (`curl.get` against discovered routes, `nmap`'s
-   service-detection methods, a crawl of observed links, an
-   OpenAPI/Swagger spec if the Target serves one). For each input found,
+   tools are available: `curl.get` against discovered routes and against
+   `/robots.txt` and `/sitemap.xml` (a `Disallow` entry or a listed URL is
+   often the cheapest way to surface a path nothing else links to),
+   `nmap`'s `service_version_scan`, a crawl of observed links, and an
+   OpenAPI/Swagger spec if the Target serves one. For each input found,
    MUST record it: its kind, the endpoint it lives on, its name, which
    Rig method and parameter a later vertical uses to reach it, and a
    well-formed sample value.
@@ -64,3 +66,13 @@ answer instead of each re-discovering it alone.
 - "The tech stack suggests a proxy is probably in front of this." — A
   suggestion is not an observation. MUST record refuted, not confirmed,
   until the boundary is actually seen.
+
+## Known gaps
+
+Hidden-parameter discovery (wordlist-based fuzzing against every
+discovered endpoint, the way a dedicated parameter-fuzzing tool would)
+and mining a Target's own JavaScript for endpoints and parameter names
+it never renders into a form have no Rig tool to dispatch through yet.
+Treat both as blocked for now: name them in the run's own notes rather
+than skipping silently, and enumerate only what `curl`, `nmap`, a crawl
+of observed links, and metafiles actually surface.
