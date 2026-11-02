@@ -10,6 +10,11 @@ query string for `get`), so nothing a caller passes can be read as a
 second `curl` flag the way an unvalidated `host` could smuggle an nmap
 flag (ADR 0018's same concern, applied to a tool whose whole job is
 submitting attacker-controlled values instead of refusing them).
+
+Every method's `ToolResult.output` is the status line and response
+headers followed by the body, in that order (curl's own `-i` format),
+so a caller can read a status code, a response header, or a redirect's
+Location off the front of it without a second request.
 """
 
 import re
@@ -202,6 +207,13 @@ class CurlBridge:
             str(self.executable),
             "-s",
             "-S",
+            # Prepends the status line and response headers to the body in
+            # `output` (curl's own `-i` format): a caller reading for a
+            # status-code pattern, a response header, or a redirect's
+            # Location has something to actually read. Without it,
+            # `output` was body text only and no caller of this bridge
+            # could observe any of the three.
+            "-i",
             "--max-time",
             str(int(_REQUEST_TIMEOUT_S)),
             *header_args,

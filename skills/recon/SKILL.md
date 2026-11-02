@@ -43,10 +43,13 @@ answer instead of each re-discovering it alone.
    the endpoint it lives on, its name, which Rig method and parameter a
    later vertical uses to reach it, and a well-formed sample value.
 2. MUST attempt to actually observe the trust boundary named by every
-   signal this turn's request lists as needing confirmation. For each
-   one, MUST record a confirmed or refuted signal, backed by something
-   actually seen (a response header, a status-code pattern, a redirect,
-   an introspection probe). MUST NOT record a signal from an inference —
+   signal this turn's request lists as needing confirmation. `curl.get`'s
+   output begins with the status line and response headers, a blank
+   line, then the body — read that leading block for the status code,
+   header, or redirect `Location` a signal needs. For each signal, MUST
+   record a confirmed or refuted signal, backed by something actually
+   seen (a response header, a status-code pattern, a redirect, an
+   introspection probe). MUST NOT record a signal from an inference —
    "this response looks like Node, there's probably an nginx reverse
    proxy in front of it" is a guess, not an observation, and recording it
    as confirmed would let a gated vertical start on a boundary nobody
@@ -81,13 +84,6 @@ it never renders into a form have no Rig tool to dispatch through yet.
 Treat both as blocked for now: name them in the run's own notes rather
 than skipping silently, and enumerate only what `curl`, `nmap`, a crawl
 of observed links, and metafiles actually surface.
-
-`curl.get`'s result carries only the response body: it does not report
-a status code, a response header, or a redirect target. A gate signal
-MUST NOT be recorded as confirmed on the strength of a header or
-status-code pattern until a Rig tool actually reports one — today, none
-does. Record any such boundary as an open gap in the run's own notes
-rather than guessing from body content alone.
 
 ## References
 
