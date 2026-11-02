@@ -32,11 +32,16 @@ answer instead of each re-discovering it alone.
    tools are available: `curl.get` against discovered routes and against
    `/robots.txt` and `/sitemap.xml` (a `Disallow` entry or a listed URL is
    often the cheapest way to surface a path nothing else links to),
-   `nmap`'s `service_version_scan`, a crawl of observed links, and an
-   OpenAPI/Swagger spec if the Target serves one. For each input found,
-   MUST record it: its kind, the endpoint it lives on, its name, which
-   Rig method and parameter a later vertical uses to reach it, and a
-   well-formed sample value.
+   `nmap`'s `service_version_scan`, a same-origin crawl of observed links
+   bounded to a depth of 3 from the Target's own entry points, and an
+   OpenAPI/Swagger spec if the Target serves one. MUST also read every
+   fetched page's returned HTML for `<form>` elements: each one's field
+   names are form fields, and a `type="file"` input is an upload filename
+   input — the crawl surfaces routes, not the fields a form on a route
+   accepts, so this is a distinct reading of the same `curl.get` output,
+   not an extra request. For each input found, MUST record it: its kind,
+   the endpoint it lives on, its name, which Rig method and parameter a
+   later vertical uses to reach it, and a well-formed sample value.
 2. MUST attempt to actually observe the trust boundary named by every
    signal this turn's request lists as needing confirmation. For each
    one, MUST record a confirmed or refuted signal, backed by something
@@ -76,3 +81,17 @@ it never renders into a form have no Rig tool to dispatch through yet.
 Treat both as blocked for now: name them in the run's own notes rather
 than skipping silently, and enumerate only what `curl`, `nmap`, a crawl
 of observed links, and metafiles actually surface.
+
+`curl.get`'s result carries only the response body: it does not report
+a status code, a response header, or a redirect target. A gate signal
+MUST NOT be recorded as confirmed on the strength of a header or
+status-code pattern until a Rig tool actually reports one — today, none
+does. Record any such boundary as an open gap in the run's own notes
+rather than guessing from body content alone.
+
+## References
+
+- RFC 9309, the Robots Exclusion Protocol: <https://www.rfc-editor.org/rfc/rfc9309.html>
+- sitemaps.org, Sitemap XML format: <https://www.sitemaps.org/protocol.html>
+- OWASP Web Security Testing Guide, Information Gathering: <https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/01-Information_Gathering/>
+- OpenAPI Specification: <https://spec.openapis.org/oas/latest.html>
