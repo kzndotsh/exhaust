@@ -53,10 +53,13 @@ explains.
    surfaces that isn't already in the surface MUST be recorded there
    before it is probed, so later verticals and later runs see it too.
 2. MUST record a baseline for every input first: submit each input's
-   own normal, well-formed value and record the response (status code,
-   timing, body length, and any error text verbatim). Every later diff
-   in this procedure is measured against this baseline, never against
-   an assumed "should have succeeded" response.
+   own normal, well-formed value and record the response. Every Rig
+   dispatch method's output leads with the status line and response
+   headers and ends with an `X-Exhaust-Elapsed-Seconds` line curl
+   itself appends — read the status code and elapsed time off those,
+   and record body length and any error text verbatim from what's in
+   between. Every later diff in this procedure is measured against this
+   baseline, never against an assumed "should have succeeded" response.
 3. MUST probe each input with one canonical payload per applicable
    class, boundary-breaking rather than exploit-complete (the goal at
    this stage is detecting a behavior diff, not achieving code

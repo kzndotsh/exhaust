@@ -14,7 +14,10 @@ submitting attacker-controlled values instead of refusing them).
 Every method's `ToolResult.output` is the status line and response
 headers followed by the body, in that order (curl's own `-i` format),
 so a caller can read a status code, a response header, or a redirect's
-Location off the front of it without a second request.
+Location off the front of it without a second request. It ends with an
+`X-Exhaust-Elapsed-Seconds: <total>` line curl itself appends after the
+body, the one place total elapsed time can be reported, for a caller
+measuring a timing-based diff.
 """
 
 import re
@@ -63,6 +66,13 @@ _VERSION_PATTERN = re.compile(r"^curl (\S+)", re.MULTILINE)
 
 _REQUEST_TIMEOUT_S = 30.0
 _VERSION_TIMEOUT_S = 10.0
+
+# Appended by curl itself, after the body, on its own line: the only place
+# `-w` can write it, since total elapsed time isn't known until the transfer
+# finishes. A fixed marker (never attacker-influenced) so a reader can find
+# this line without mistaking it for arbitrary trailing body content.
+_TIMING_MARKER = "X-Exhaust-Elapsed-Seconds"
+_TIMING_WRITEOUT = f"\n{_TIMING_MARKER}: %{{time_total}}\n"
 
 # A plain curl invocation sends 'User-Agent: curl/<version>' and no Accept header
 # at all — one of the cheapest, most common signals a Target's bot-detection
@@ -214,6 +224,8 @@ class CurlBridge:
             # `output` was body text only and no caller of this bridge
             # could observe any of the three.
             "-i",
+            "-w",
+            _TIMING_WRITEOUT,
             "--max-time",
             str(int(_REQUEST_TIMEOUT_S)),
             *header_args,

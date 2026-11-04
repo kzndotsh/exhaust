@@ -161,6 +161,12 @@ def test_every_request_asks_curl_to_prepend_status_line_and_headers(tmp_path: Pa
     assert "-i" in result.output.split()
 
 
+def test_every_request_asks_curl_to_append_elapsed_time(tmp_path: Path) -> None:
+    bridge = CurlBridge(executable=_fake_curl(tmp_path))
+    result = bridge.run("get", url="http://target.example/")
+    assert "X-Exhaust-Elapsed-Seconds: %{time_total}" in result.output
+
+
 def test_a_nonzero_exit_is_reported_as_not_ok(tmp_path: Path) -> None:
     bridge = CurlBridge(executable=_fake_curl(tmp_path, exit_code=1))
     result = bridge.run("get", url="http://target.example/")
