@@ -64,6 +64,22 @@
       "required": true
     },
     {
+      "description": "Probes whether the Target exposes sensitive data to any caller regardless of identity: version-control or config files left in the webroot (`.git/HEAD`, `.env`), backup-suffixed variants of a known file (`.bak`, `.old`, `~`), a verbose error message or stack trace revealing file paths or framework internals, an HTML comment or inline script left with credentials or developer notes, and auto-generated directory listings. Dispatches through `curl.get` against a small, fixed checklist of commonly-exposed paths plus every path the surface already records, reading the response body for recognizable sensitive content. Use when a Workspace's Playbook starts; this vertical needs only the Target's base URL and recon's enumerated surface, not any particular confirmed input shape. Do not use for an authorized identity reading a specific object's own properties beyond its entitlement \u2014 that's `access-control`'s BOPLA sub-case. Do not use for data obtained by making the Target issue a request to an internal destination on the attacker's behalf \u2014 that's `ssrf`. Do not use for correlating a disclosed version or banner against a known CVE \u2014 that's `known-CVE`. Do not use for reading an arbitrary file off local disk via path traversal \u2014 that's `file handling`.\n",
+      "gate": null,
+      "keywords": [
+        "information disclosure",
+        "sensitive data exposure",
+        "source code disclosure",
+        "directory listing",
+        "verbose error message",
+        "stack trace disclosure",
+        "backup file exposure",
+        "config file exposure"
+      ],
+      "name": "information-disclosure",
+      "required": true
+    },
+    {
       "description": "Probes every discovered input for command, SQL, LDAP, XPath, template (SSTI), header/CRLF, and NoSQL injection by submitting a canonical boundary-breaking payload per class and diffing the observed response against a clean baseline. Use when recon has enumerated at least one request-shaped input (form field, query parameter, header, cookie, path segment, or uploaded filename) on any Workspace. Do not use for deserialization of structured payloads (pickle, YAML, XML, Java-object streams) \u2014 that's the `deserialization` vertical; this one is for payloads interpreted as code or query syntax, never payloads reconstructed as a data structure.\n",
       "gate": null,
       "keywords": [
