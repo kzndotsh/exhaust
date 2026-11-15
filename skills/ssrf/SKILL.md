@@ -9,24 +9,31 @@ description: >
   issue a request to an attacker-chosen destination (localhost, an
   internal-only host, a cloud metadata endpoint) instead of, or in
   addition to, its intended one. Dispatches through `curl.get`'s
-  `query`/`path_segment` or `curl.post_form`'s `data`, submitting a
-  tiered set of destinations and reading the status/header block and
-  elapsed-time line their output carries. Use when the Workspace's
-  surface records an input whose name or recorded normal value is
-  URL/hostname-shaped, or whose baseline response already shows the
-  Target fetching content from that value. Do not use for a path or
+  `query`/`path_segment`/`headers` or `curl.post_form`'s `data`,
+  submitting a tiered set of destinations and reading the status/header
+  block and elapsed-time line their output carries. Use when the
+  Workspace's surface records an input whose name or recorded normal
+  value is URL/hostname-shaped, whose baseline response already shows
+  the Target fetching content from that value, or a `Referer` header
+  the Target's own back-end processes. Do not use for a path or
   filename read directly off local disk — that's `file handling`. Do
   not use for a request forged cross-site using the victim's own
   browser session — that's `CSRF`. Do not use for scanning the Target's
   own listening ports directly — that's `recon`'s job; this vertical is
   about the Target making a request on the attacker's behalf, not the
-  attacker reaching the Target itself.
+  attacker reaching the Target itself. Do not use for a URL embedded
+  inside a parsed structured payload (XML, YAML, or similar) that a
+  parser dereferences as part of handling the format itself — that's
+  the `deserialization` vertical's territory, not a destination-naming
+  input this vertical enumerates directly.
 keywords:
   - SSRF
   - server-side request forgery
   - cloud metadata endpoint
+  - IMDSv2
   - internal network pivot
   - blind SSRF
+  - DNS rebinding
   - URL validation bypass
 ---
 
@@ -49,7 +56,12 @@ or a cloud provider's metadata endpoint.
    URL- or hostname-shaped, plus any input whose baseline response
    already shows evidence the Target fetched content from that value
    (a reflected title, byte count, or content-type matching the
-   supplied URL's own resource).
+   supplied URL's own resource). Also identify, independent of any
+   named parameter, whether the Target's own back-end processes a
+   `Referer` header at all (an analytics hit, a referral log, a
+   link-preview feature) — a header the Target's own code may
+   dereference even when no URL-shaped parameter exists on the same
+   request.
 2. MUST record a baseline for every candidate first: submit the
    input's own recorded normal value (an external, intended
    destination) and record the full response — the leading status/
@@ -60,18 +72,33 @@ or a cloud provider's metadata endpoint.
 3. MUST probe each candidate with an escalating, tiered set of
    destinations, recording each tier's response distinctly:
    - **Localhost / loopback**: submit `http://127.0.0.1`,
-     `http://localhost`, and the Target's own observed hostname as the
-     input's value. A response that differs from the external
-     baseline — a different status, a different body, content that
-     looks like an internal admin surface — is evidence the Target
-     itself issued the request.
+     `http://localhost`, `http://[::1]`, `http://[::ffff:127.0.0.1]`
+     (IPv6 loopback and the IPv4-mapped-IPv6 form — a distinct address
+     form, not an encoding, that some validators never canonicalize
+     before checking against a blocklist), and the Target's own
+     observed hostname as the input's value. A response that differs
+     from the external baseline — a different status, a different
+     body, content that looks like an internal admin surface — is
+     evidence the Target itself issued the request.
    - **Cloud metadata endpoint**: submit `http://169.254.169.254/latest/meta-data/`
-     (and the equivalent GCP `http://metadata.google.internal/` or
-     Azure `http://169.254.169.254/metadata/instance` form, if the
-     Target's own stack is known from recon). A response containing
-     actual metadata content is immediately Oracle-checkable on its
-     own — this tier alone can produce a confirmed Finding with no
-     further escalation needed.
+     (AWS), `http://metadata.google.internal/computeMetadata/v1/` with
+     a `Metadata-Flavor: Google` header set via `curl.get`'s `headers`
+     parameter (GCP), and `http://169.254.169.254/metadata/instance`
+     with a `Metadata: true` header the same way, plus
+     `?api-version=<date>` on the query string (Azure, if the Target's
+     own stack is known from recon). A response containing actual
+     metadata content on any of these is immediately Oracle-checkable
+     on its own — this tier alone can produce a confirmed Finding with
+     no further escalation needed. A `401`/`403` specifically from the
+     AWS form is not a dead end: AWS's IMDSv2 requires a `PUT`-issued
+     session token before any `GET` succeeds, a two-step, cross-method
+     exchange this vertical's single-destination dispatch cannot
+     generally perform through a reflected-URL SSRF primitive. MUST
+     record that case as `needs_confirmation` with the requirement
+     "Target enforces IMDSv2; confirming a bypass needs an SSRF
+     primitive that lets the attacker also control HTTP method and a
+     prior request, not only the destination" — MUST NOT treat the
+     `401`/`403` as a generic failure and drop it silently.
    - **Internal / RFC 1918 ranges**: submit a small, fixed set of
      common internal addresses (`10.0.0.1`, `192.168.0.1`,
      `172.16.0.1`) and record each response distinctly. A response
@@ -82,16 +109,25 @@ or a cloud provider's metadata endpoint.
    - **Filter-bypass encodings**: where a raw internal IP/hostname is
      rejected outright (a distinct, filter-shaped error, not a generic
      connection failure) but a URL-shaped input is otherwise accepted,
-     MUST retry the identical destination via an alternate encoding
-     (a decimal IP form, e.g. `2130706433` for `127.0.0.1`) before
-     concluding the filter blocks the destination rather than one
-     literal string form of it. Where the surface records a
-     Target-hosted open-redirect endpoint, MUST also try submitting
-     that endpoint's own URL (pointed at a localhost/internal/metadata
-     destination) as the input's value — a filter checking only the
-     literal destination string never sees the redirect's real target,
-     since this vertical has no attacker-controlled external host of
-     its own to redirect through.
+     MUST retry the identical destination via each of: a decimal IP
+     form (`2130706433` for `127.0.0.1`), an octal form
+     (`017700000001`), and a short/dotted form (`127.1`) before
+     concluding the filter survives this tier — MUST NOT conclude from
+     one alternate encoding failing that the filter handles the whole
+     family; real-world parsers are documented as encoding-specific (a
+     filter blocking decimal does not imply it blocks octal). Where the
+     surface records a Target-hosted open-redirect endpoint, MUST also
+     try submitting that endpoint's own URL (pointed at a
+     localhost/internal/metadata destination) as the input's value — a
+     filter checking only the literal destination string never sees
+     the redirect's real target, since this vertical has no
+     attacker-controlled external host of its own to redirect through.
+   - **Referer-header SSRF**: where step 1 found the Target's own
+     back-end processes the `Referer` header, submit the same tiered
+     destination set as this candidate's own baseline via `curl.get`'s
+     `headers` parameter (`{"Referer": "<tiered destination>"}`)
+     rather than a body or query value, diffed and escalated the same
+     way as every other candidate in this procedure.
 4. MUST diff against the recorded baseline, never against expectation.
    A probe is interesting only when the response differs from that
    same input's own baseline in a way the tier's own mechanism
@@ -163,10 +199,26 @@ a candidate whose only available signal is "no reflected content and
 no measurable differential" is an open proof gap, never a ruled-out
 result.
 
+DNS rebinding (an attacker-controlled hostname that resolves to a
+benign address during the Target's own validation check and to a
+loopback/internal address at actual connection time) is a named SSRF
+filter-bypass technique this vertical cannot exercise at all today:
+neither `curl` nor `nmap` provisions registering or flipping a DNS
+record under this vertical's control. Record any candidate whose only
+remaining open question is a rebinding bypass as `needs_confirmation`
+with that requirement named explicitly, never as ruled out.
+
 ## References
 
 - MITRE CWE-918, Server-Side Request Forgery (SSRF): <https://cwe.mitre.org/data/definitions/918.html>
+- MITRE CWE-441, Unintended Proxy or Intermediary: <https://cwe.mitre.org/data/definitions/441.html>
+- MITRE CWE-610, Externally Controlled Reference to a Resource in Another Sphere:
+  <https://cwe.mitre.org/data/definitions/610.html>
 - OWASP Top 10:2021, A10:2021 Server-Side Request Forgery:
   <https://owasp.org/Top10/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/>
 - PortSwigger, Server-side request forgery (SSRF) (testing technique):
   <https://portswigger.net/web-security/ssrf>
+- OWASP Cheat Sheet Series, Server-Side Request Forgery Prevention:
+  <https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html>
+- AWS, Add defense in depth against open firewalls, reverse proxies, and SSRF vulnerabilities:
+  <https://aws.amazon.com/blogs/security/defense-in-depth-open-firewalls-reverse-proxies-ssrf-vulnerabilities-ec2-instance-metadata-service/>
