@@ -22,6 +22,15 @@ DEFAULT_OUTPUT_RELATIVE_PATH = Path("catalog") / "verticals.generated.json"
 TEMPLATE_DIRECTORY_NAME = "TEMPLATE"
 """The scaffold directory a new vertical is copied from, never a real one."""
 
+_SANCTIONED_FRONT_MATTER_KEYS = frozenset({"name", "required", "gate", "description", "keywords"})
+"""The skills-system spec's closed top-level key set (§2): no other key is sanctioned.
+
+A field only one skill file's author adopted, with nothing to enforce
+it, is exactly the silent per-file drift ADR 0016 exists to rule
+out — so an unlisted key fails generation here rather than being
+silently read past.
+"""
+
 
 class MalformedSkillFileError(ValueError):
     """A skill file's front matter doesn't satisfy ADR 0011's schema."""
@@ -145,9 +154,17 @@ def _entry_from_front_matter(data: dict[str, Any], source: Path) -> VerticalEntr
     MalformedSkillFileError
         If `name` is missing or empty, `required` is not a bool, a
         required vertical carries a `gate`, a gated vertical is missing
-        one, `description` is missing or empty, or `keywords` is present
-        but isn't a list of non-empty strings.
+        one, `description` is missing or empty, `keywords` is present
+        but isn't a list of non-empty strings, or any top-level key
+        isn't one of `_SANCTIONED_FRONT_MATTER_KEYS`.
     """
+    unsanctioned = sorted(set(data) - _SANCTIONED_FRONT_MATTER_KEYS)
+    if unsanctioned:
+        raise MalformedSkillFileError(
+            f"{source}: front matter has non-spec top-level key(s) {unsanctioned} "
+            "(see skills-system spec §2)"
+        )
+
     name = data.get("name")
     if not isinstance(name, str) or not name:
         raise MalformedSkillFileError(f"{source}: missing or empty 'name'")

@@ -96,6 +96,18 @@ def test_missing_description_is_rejected(tmp_path: Path) -> None:
         discover_verticals(skills_dir)
 
 
+def test_an_unsanctioned_top_level_key_is_rejected(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / "injection"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: injection\nrequired: true\ndescription: d\npriority: high\n---\nBody.\n"
+    )
+
+    with pytest.raises(MalformedSkillFileError):
+        discover_verticals(skills_dir)
+
+
 def test_blank_description_is_rejected(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"
     skill_dir = skills_dir / "injection"
