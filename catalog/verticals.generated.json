@@ -74,6 +74,20 @@
       ],
       "name": "recon",
       "required": true
+    },
+    {
+      "description": "Probes whether any input controls, in whole or part, the destination of a server-initiated outbound request \u2014 a URL, hostname, IP, or path fragment used by a webhook/callback, a fetch-by-URL feature, an image proxy, or a PDF/report generator \u2014 letting the Target be made to issue a request to an attacker-chosen destination (localhost, an internal-only host, a cloud metadata endpoint) instead of, or in addition to, its intended one. Dispatches through `curl.get`'s `query`/`path_segment` or `curl.post_form`'s `data`, submitting a tiered set of destinations and reading the status/header block and elapsed-time line their output carries. Use when the Workspace's surface records an input whose name or recorded normal value is URL/hostname-shaped, or whose baseline response already shows the Target fetching content from that value. Do not use for a path or filename read directly off local disk \u2014 that's `file handling`. Do not use for a request forged cross-site using the victim's own browser session \u2014 that's `CSRF`. Do not use for scanning the Target's own listening ports directly \u2014 that's `recon`'s job; this vertical is about the Target making a request on the attacker's behalf, not the attacker reaching the Target itself.\n",
+      "gate": null,
+      "keywords": [
+        "SSRF",
+        "server-side request forgery",
+        "cloud metadata endpoint",
+        "internal network pivot",
+        "blind SSRF",
+        "URL validation bypass"
+      ],
+      "name": "ssrf",
+      "required": true
     }
   ]
 }
