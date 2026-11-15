@@ -51,8 +51,12 @@
         "CSRF",
         "cross-site request forgery",
         "anti-CSRF token",
+        "synchronizer token",
+        "double submit cookie",
         "SameSite bypass",
         "state-changing GET",
+        "method override",
+        "method confusion",
         "Origin header validation",
         "Referer header validation"
       ],
