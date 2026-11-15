@@ -1,6 +1,22 @@
 {
   "verticals": [
     {
+      "description": "Probes whether a confirmed authenticated identity can reach or act on an object, record, or function outside its own ownership or role boundary: object-level bypass (IDOR, BOLA) and function-level bypass (BFLA), both horizontal (same privilege tier, a different owner's data) and vertical (a lower-privileged identity reaching a higher-privileged action). Replays the same request as a second, distinct identity and diffs the result against what that identity is and isn't entitled to see or do. Use when the Workspace's enumerated surface carries an object-id-shaped input (a numeric or UUID path segment, an `id`/`*_id`-named query parameter or hidden form field) or a role-gated endpoint, and the Workspace has credentials for at least two distinct Target identities. Do not use for a resource reachable with no authentication at all \u2014 that's the `information disclosure` vertical. Do not use for the session token or cookie itself being guessable, forgeable, or otherwise weak \u2014 that's `auth/session`.\n",
+      "gate": null,
+      "keywords": [
+        "IDOR",
+        "BOLA",
+        "BFLA",
+        "broken object level authorization",
+        "broken function level authorization",
+        "horizontal privilege escalation",
+        "vertical privilege escalation",
+        "broken access control"
+      ],
+      "name": "access-control",
+      "required": true
+    },
+    {
       "description": "Probes every discovered input for command, SQL, LDAP, XPath, template (SSTI), header/CRLF, and NoSQL injection by submitting a canonical boundary-breaking payload per class and diffing the observed response against a clean baseline. Use when recon has enumerated at least one request-shaped input (form field, query parameter, header, cookie, path segment, or uploaded filename) on any Workspace. Do not use for deserialization of structured payloads (pickle, YAML, XML, Java-object streams) \u2014 that's the `deserialization` vertical; this one is for payloads interpreted as code or query syntax, never payloads reconstructed as a data structure.\n",
       "gate": null,
       "keywords": [
