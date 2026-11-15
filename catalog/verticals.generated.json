@@ -21,14 +21,22 @@
       "required": true
     },
     {
-      "description": "Probes the Target's session-management and authentication-flow mechanics for logic flaws that let a session outlive or escape the boundary it should be scoped to: session fixation (a pre-chosen session identifier remains valid after authentication), missing session invalidation on logout or credential change (an old session identifier still grants access afterward), weak session-cookie attributes (`Secure`, `HttpOnly`, `SameSite`), and password-reset token weaknesses (predictability, reuse after redemption, missing expiration). Dispatches through `curl.get`/`curl.post_form`, reading the session identifier and its attributes off the leading status-line and header block their output carries, and setting a chosen session value via `headers`. Use when recon has confirmed a session- identifying cookie or header and a login endpoint on the Workspace's surface. Do not use for a request replayed cross-site using the victim's own ambient session \u2014 that's `CSRF`. Do not use for brute-forcing or rate-limiting a login, OTP, or reset endpoint \u2014 that's the reserved `rate-limiting / brute-force` vertical. Do not use for a JWT's own signing or structure weaknesses, an OAuth flow's own weaknesses, or a reset link poisoned via the Host header \u2014 that's the reserved `OAuth / JWT handling` or `Host header attacks` vertical respectively.\n",
+      "description": "Probes the Target's session-management and authentication-flow mechanics for logic flaws that let a session, token, or verification step outlive or escape the boundary it should be scoped to: session fixation (a pre-chosen session identifier remains valid after authentication), missing session invalidation on logout, credential change, account disable/lockout, or an explicit \"log out all devices\" control (an old session identifier still grants access afterward), weak session-cookie and persistent-login (\"remember me\") token attributes, password-reset token weaknesses (predictability, reuse after redemption, missing expiration), and multi-factor verification-binding weaknesses (the server not re-checking the second factor server-side, or checking it against the wrong account). Dispatches through `curl.get`/`curl.post_form`, reading the session identifier and its attributes off the leading status-line and header block their output carries, and setting a chosen session value via `headers`. Use when recon has confirmed a session-identifying cookie or header and a login endpoint on the Workspace's surface. Do not use for a request replayed cross-site using the victim's own ambient session \u2014 that's `CSRF`. Do not use for brute-forcing or rate-limiting a login, OTP, or reset endpoint \u2014 that's the reserved `rate-limiting / brute-force` vertical. Do not use for a JWT's own signing or structure weaknesses, an OAuth flow's own weaknesses, or a reset link poisoned via the Host header or a forwarded-host header (e.g. `X-Forwarded-Host`) \u2014 that's the reserved `OAuth / JWT handling` or `Host header attacks` vertical respectively.\n",
       "gate": null,
       "keywords": [
         "session fixation",
         "session hijacking",
         "session invalidation",
+        "account lockout",
+        "log out all devices",
+        "concurrent session termination",
         "insecure cookie attributes",
         "password reset token",
+        "remember me",
+        "persistent login token",
+        "multi-factor authentication bypass",
+        "2FA bypass",
+        "verification binding",
         "broken authentication",
         "account takeover",
         "logout invalidation"
