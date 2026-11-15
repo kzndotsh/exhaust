@@ -1,13 +1,17 @@
 {
   "verticals": [
     {
-      "description": "Probes whether a confirmed authenticated identity can reach or act on an object, record, or function outside its own ownership or role boundary: object-level bypass (IDOR, BOLA) and function-level bypass (BFLA), both horizontal (same privilege tier, a different owner's data) and vertical (a lower-privileged identity reaching a higher-privileged action). Replays the same request as a second, distinct identity and diffs the result against what that identity is and isn't entitled to see or do. Use when the Workspace's enumerated surface carries an object-id-shaped input (a numeric or UUID path segment, an `id`/`*_id`-named query parameter or hidden form field) or a role-gated endpoint, and the Workspace has credentials for at least two distinct Target identities. Do not use for a resource reachable with no authentication at all \u2014 that's the `information disclosure` vertical. Do not use for the session token or cookie itself being guessable, forgeable, or otherwise weak \u2014 that's `auth/session`.\n",
+      "description": "Probes whether a confirmed authenticated identity can reach, read, or write an object, property, or function outside its own ownership or role boundary: object-level bypass (IDOR, BOLA), object-property-level bypass (BOPLA \u2014 reading undisclosed properties or writing properties a caller shouldn't control, such as a `role` field in a write request), and function-level bypass (BFLA), each checked both horizontally (same privilege tier, a different owner's data) and vertically (a lower-privileged identity reaching a higher-privileged action), plus whether an auth-gated input enforces identity at all versus enforcing it incorrectly. Dispatches every probe through `curl.get` (an object-id in a `path_segment` or `query` value) or `curl.post_form` (an object-id or property in `data`), carrying each probing identity's credential in `headers`. Use when the Workspace's enumerated surface carries an object-id-shaped input (a numeric or UUID path segment, an `id`/`*_id`-named query parameter or hidden form field), a property-bearing write endpoint (a PUT/PATCH/POST body), or a role-gated endpoint, and the Workspace has credentials for at least two distinct Target identities. Do not use for a resource that was never gated behind authentication at all (a genuinely public endpoint) \u2014 that's the `information disclosure` vertical. Do not use for the session token or cookie itself being guessable, forgeable, or otherwise weak \u2014 that's `auth/session`.\n",
       "gate": null,
       "keywords": [
         "IDOR",
         "BOLA",
+        "BOPLA",
+        "mass assignment",
+        "excessive data exposure",
         "BFLA",
         "broken object level authorization",
+        "broken object property level authorization",
         "broken function level authorization",
         "horizontal privilege escalation",
         "vertical privilege escalation",

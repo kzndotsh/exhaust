@@ -2,26 +2,37 @@
 name: access-control
 required: true
 description: >
-  Probes whether a confirmed authenticated identity can reach or act on an
-  object, record, or function outside its own ownership or role boundary:
-  object-level bypass (IDOR, BOLA) and function-level bypass (BFLA), both
-  horizontal (same privilege tier, a different owner's data) and vertical
-  (a lower-privileged identity reaching a higher-privileged action).
-  Replays the same request as a second, distinct identity and diffs the
-  result against what that identity is and isn't entitled to see or do.
-  Use when the Workspace's enumerated surface carries an object-id-shaped
-  input (a numeric or UUID path segment, an `id`/`*_id`-named query
-  parameter or hidden form field) or a role-gated endpoint, and the
-  Workspace has credentials for at least two distinct Target identities.
-  Do not use for a resource reachable with no authentication at all —
-  that's the `information disclosure` vertical. Do not use for the
-  session token or cookie itself being guessable, forgeable, or otherwise
-  weak — that's `auth/session`.
+  Probes whether a confirmed authenticated identity can reach, read, or
+  write an object, property, or function outside its own ownership or
+  role boundary: object-level bypass (IDOR, BOLA), object-property-level
+  bypass (BOPLA — reading undisclosed properties or writing properties a
+  caller shouldn't control, such as a `role` field in a write request),
+  and function-level bypass (BFLA), each checked both horizontally (same
+  privilege tier, a different owner's data) and vertically (a
+  lower-privileged identity reaching a higher-privileged action), plus
+  whether an auth-gated input enforces identity at all versus enforcing
+  it incorrectly. Dispatches every probe through `curl.get` (an
+  object-id in a `path_segment` or `query` value) or `curl.post_form`
+  (an object-id or property in `data`), carrying each probing identity's
+  credential in `headers`. Use when the Workspace's enumerated surface
+  carries an object-id-shaped input (a numeric or UUID path segment, an
+  `id`/`*_id`-named query parameter or hidden form field), a
+  property-bearing write endpoint (a PUT/PATCH/POST body), or a
+  role-gated endpoint, and the Workspace has credentials for at least
+  two distinct Target identities. Do not use for a resource that was
+  never gated behind authentication at all (a genuinely public
+  endpoint) — that's the `information disclosure` vertical. Do not use
+  for the session token or cookie itself being guessable, forgeable, or
+  otherwise weak — that's `auth/session`.
 keywords:
   - IDOR
   - BOLA
+  - BOPLA
+  - mass assignment
+  - excessive data exposure
   - BFLA
   - broken object level authorization
+  - broken object property level authorization
   - broken function level authorization
   - horizontal privilege escalation
   - vertical privilege escalation
@@ -31,8 +42,11 @@ keywords:
 ## What this vertical investigates
 
 Whether the Target enforces *who*, not merely *whether*, is allowed to
-reach a given object or action: the ownership boundary behind IDOR and
-BOLA, and the role boundary behind BFLA.
+reach a given object, object property, or action: the ownership
+boundary behind IDOR and BOLA, the property-level boundary behind
+BOPLA, and the role boundary behind BFLA — and, for any of the three,
+whether the boundary is enforced at all (no check ran) or enforced
+incorrectly (a check ran but picked the wrong caller to let through).
 
 ## Procedure
 
@@ -40,17 +54,26 @@ BOLA, and the role boundary behind BFLA.
    anything — this vertical does not enumerate the Target itself.
    From it, identify every object-id-shaped input (a numeric or UUID
    path segment; an `id`/`*_id`-named query parameter, form field, or
-   header) and every endpoint that looks role-gated (an admin-prefixed
-   path, or any route whose own baseline response is a 401/403 or a
-   redirect to login for a normal-privilege identity). MUST obtain at
-   least two distinct authenticated Target identities from the
-   Workspace's own engagement material before probing anything — one
-   baseline identity, plus at least one other: a second
+   header), every property-bearing write endpoint (a PUT/PATCH/POST
+   form field recorded against an object that already has other,
+   identity-scoped data), and every endpoint that looks role-gated (an
+   admin-prefixed path, or any route whose own baseline response is a
+   401/403 or a redirect to login for a normal-privilege identity).
+   Each input already carries which Rig method and parameter reaches
+   it: dispatch every probe below through `curl.get` (an object-id in
+   a `path_segment` or `query` value) or `curl.post_form` (an
+   object-id or property in `data`), carrying whichever identity is
+   probing in `headers` — never re-derive a shape-to-method mapping.
+   MUST obtain at least two distinct authenticated Target identities
+   from the Workspace's own engagement material before probing
+   anything — one baseline identity, plus at least one other: a second
    normal-privilege identity for a horizontal check, an
    elevated-privilege identity for a vertical check. MUST NOT guess at
    or fabricate a second identity. If the Workspace provides only one
-   identity, this vertical cannot investigate anything; MUST report
-   that plainly rather than closing with no findings as if every
+   identity, this vertical cannot investigate anything that needs a
+   second identity, though the no-credentials-at-all variant in step 3
+   still applies with only one; MUST report the missing second
+   identity plainly rather than closing with no findings as if every
    candidate had been checked.
 2. MUST record a baseline for every candidate object-id input and every
    candidate role-gated endpoint first: submit it as the identity that
@@ -65,7 +88,26 @@ BOLA, and the role boundary behind BFLA.
      actually confirm who owns the swapped-in id first (a value
      recorded from that second identity's own baseline, never a
      guessed or sequential id), so a diff can be attributed to the
-     access check and not to the id simply not existing.
+     access check and not to the id simply not existing. MUST also
+     replay the same swapped-id request with no identity's credentials
+     at all (no `Authorization` header, no session cookie) — a Target
+     that returns the other identity's data with no credentials at all
+     has no authorization check running (a different failure than one
+     that runs but picks the wrong owner), and the current procedure
+     would otherwise never catch it.
+   - **BOPLA (object-property-level)**: authenticated as the identity
+     that owns the object, replay its own legitimate write request
+     (the same `post_form` call step 2 baselined) with one property
+     added or changed to a value only a higher-privileged identity or
+     the server itself should be able to set (e.g. a `role`,
+     `is_admin`, `balance`, or `price` field not present in the
+     normal form). Separately, where the baseline's own response body
+     includes a property that identity shouldn't be able to read,
+     MUST check whether a request that omits it from the submitted
+     data still gets it echoed back unfiltered. This probes
+     read/write access to an object's *properties* once the identity
+     is already authorized to touch the object itself — a distinct
+     question from whether it may touch the object at all.
    - **BFLA (function-level)**: attempt the same role-gated endpoint
      or action as an identity that does not hold the required role.
      MUST try every HTTP method and every equivalent route the surface
@@ -153,5 +195,7 @@ second identity to work around it.
   <https://portswigger.net/web-security/access-control>
 - OWASP API Security Top 10, API1:2023 Broken Object Level Authorization:
   <https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/>
+- OWASP API Security Top 10, API3:2023 Broken Object Property Level Authorization:
+  <https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/>
 - OWASP API Security Top 10, API5:2023 Broken Function Level Authorization:
   <https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/>
