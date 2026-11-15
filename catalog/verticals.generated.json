@@ -21,6 +21,22 @@
       "required": true
     },
     {
+      "description": "Probes the Target's session-management and authentication-flow mechanics for logic flaws that let a session outlive or escape the boundary it should be scoped to: session fixation (a pre-chosen session identifier remains valid after authentication), missing session invalidation on logout or credential change (an old session identifier still grants access afterward), weak session-cookie attributes (`Secure`, `HttpOnly`, `SameSite`), and password-reset token weaknesses (predictability, reuse after redemption, missing expiration). Dispatches through `curl.get`/`curl.post_form`, reading the session identifier and its attributes off the leading status-line and header block their output carries, and setting a chosen session value via `headers`. Use when recon has confirmed a session- identifying cookie or header and a login endpoint on the Workspace's surface. Do not use for a request replayed cross-site using the victim's own ambient session \u2014 that's `CSRF`. Do not use for brute-forcing or rate-limiting a login, OTP, or reset endpoint \u2014 that's the reserved `rate-limiting / brute-force` vertical. Do not use for a JWT's own signing or structure weaknesses, an OAuth flow's own weaknesses, or a reset link poisoned via the Host header \u2014 that's the reserved `OAuth / JWT handling` or `Host header attacks` vertical respectively.\n",
+      "gate": null,
+      "keywords": [
+        "session fixation",
+        "session hijacking",
+        "session invalidation",
+        "insecure cookie attributes",
+        "password reset token",
+        "broken authentication",
+        "account takeover",
+        "logout invalidation"
+      ],
+      "name": "auth-session",
+      "required": true
+    },
+    {
       "description": "Probes every discovered input for command, SQL, LDAP, XPath, template (SSTI), header/CRLF, and NoSQL injection by submitting a canonical boundary-breaking payload per class and diffing the observed response against a clean baseline. Use when recon has enumerated at least one request-shaped input (form field, query parameter, header, cookie, path segment, or uploaded filename) on any Workspace. Do not use for deserialization of structured payloads (pickle, YAML, XML, Java-object streams) \u2014 that's the `deserialization` vertical; this one is for payloads interpreted as code or query syntax, never payloads reconstructed as a data structure.\n",
       "gate": null,
       "keywords": [
