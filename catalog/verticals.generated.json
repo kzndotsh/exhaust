@@ -45,6 +45,21 @@
       "required": true
     },
     {
+      "description": "Probes whether a Target's state-changing endpoint accepts a request shaped the way a true cross-site forgery would arrive: no CSRF token (or a token not bound to the requesting session), no Origin/Referer header matching the Target's own origin, or a state change reachable via a plain GET request \u2014 while still carrying the victim's own ambient session cookie. Dispatches through `curl.get`/`curl.post_form`, varying only the token/header shape of an otherwise-legitimate request and diffing whether the mutation still takes effect. Use when the Workspace's surface records a state-changing endpoint reached by `post_form` or `get` whose baseline request includes a session cookie. Do not use for the session cookie's own attributes (`Secure`/`HttpOnly`/`SameSite`) \u2014 that's `auth-session`, which already records and tests them; read its recorded `SameSite` value here rather than re-testing it. Do not use for an attacker who already possesses a second identity's own valid credentials \u2014 that's `access-control`'s cross-identity bypass, a different trust boundary than one exploited through a victim's unwitting browser. Do not use for a script-based cross-origin read primitive stealing the token itself \u2014 that's `client-side`.\n",
+      "gate": null,
+      "keywords": [
+        "CSRF",
+        "cross-site request forgery",
+        "anti-CSRF token",
+        "SameSite bypass",
+        "state-changing GET",
+        "Origin header validation",
+        "Referer header validation"
+      ],
+      "name": "csrf",
+      "required": true
+    },
+    {
       "description": "Probes every discovered input for command, SQL, LDAP, XPath, template (SSTI), header/CRLF, and NoSQL injection by submitting a canonical boundary-breaking payload per class and diffing the observed response against a clean baseline. Use when recon has enumerated at least one request-shaped input (form field, query parameter, header, cookie, path segment, or uploaded filename) on any Workspace. Do not use for deserialization of structured payloads (pickle, YAML, XML, Java-object streams) \u2014 that's the `deserialization` vertical; this one is for payloads interpreted as code or query syntax, never payloads reconstructed as a data structure.\n",
       "gate": null,
       "keywords": [
