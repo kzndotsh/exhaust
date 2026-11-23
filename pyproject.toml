@@ -29,7 +29,7 @@ packages = ["src/exhaust"]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0",
+    "pytest>=9.2.0",
     "import-linter>=2.1",
     "ruff>=0.13",
     "basedpyright>=1.40",
